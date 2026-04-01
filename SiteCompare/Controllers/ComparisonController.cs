@@ -36,6 +36,18 @@ public class ComparisonController : Controller
             return View("~/Views/Home/Index.cshtml", model);
         }
 
+        if (string.IsNullOrWhiteSpace(model.SitemapPath) || !model.SitemapPath.StartsWith('/'))
+        {
+            ModelState.AddModelError(nameof(model.SitemapPath), "Sitemap path must start with '/'.");
+            return View("~/Views/Home/Index.cshtml", model);
+        }
+
+        if (model.SitemapPath.Contains("..") || model.SitemapPath.Contains('\\'))
+        {
+            ModelState.AddModelError(nameof(model.SitemapPath), "Sitemap path may not contain '..' or backslashes.");
+            return View("~/Views/Home/Index.cshtml", model);
+        }
+
         var job = _jobService.CreateJob(
             model.PrdBaseUrl,
             model.TstBaseUrl,

@@ -7,22 +7,33 @@ public class SitemapService : ISitemapService
     private readonly HttpClient _httpClient;
     private readonly ILogger<SitemapService> _logger;
 
-    private static readonly XNamespace SitemapNs = "http://www.sitemaps.org/schemas/sitemap/0.9";
-
     public SitemapService(IHttpClientFactory httpClientFactory, ILogger<SitemapService> logger)
     {
         _httpClient = httpClientFactory.CreateClient("SitemapClient");
         _logger = logger;
     }
 
+    private const int MaxSitemapDepth = 10;
+    private const int MaxTotalUrls = 50_000;
+
     public async Task<List<string>> GetAllUrlsAsync(string baseUrl, string sitemapPath, CancellationToken cancellationToken = default)
     {
         var urls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var startUrl = baseUrl.TrimEnd('/') + sitemapPath;
 
-        _logger.LogInformation("Starting sitemap crawl from {Url}", startUrl);
+        // Determine the allowed host so we only follow sitemaps on the same origin
+        if (!Uri.TryCreate(startUrl, UriKind.Absolute, out var startUri)
+            || (startUri.Scheme != Uri.UriSchemeHttp && startUri.Scheme != Uri.UriSchemeHttps))
+        {
+            _logger.LogError("Invalid sitemap start URL: {Url}", startUrl);
+            return urls.ToList();
+        }
 
-        await ProcessSitemapUrlAsync(startUrl, urls, new HashSet<string>(StringComparer.OrdinalIgnoreCase), cancellationToken);
+        var allowedHost = startUri.Host;
+
+        _logger.LogInformation("Starting sitemap crawl from {Url} (allowed host: {Host})", startUrl, allowedHost);
+
+        await ProcessSitemapUrlAsync(startUrl, allowedHost, urls, new HashSet<string>(StringComparer.OrdinalIgnoreCase), depth: 0, cancellationToken);
 
         _logger.LogInformation("Sitemap crawl completed. Found {Count} URLs", urls.Count);
         return urls.OrderBy(u => u).ToList();
@@ -30,10 +41,31 @@ public class SitemapService : ISitemapService
 
     private async Task ProcessSitemapUrlAsync(
         string url,
+        string allowedHost,
         HashSet<string> collectedUrls,
         HashSet<string> visitedSitemaps,
+        int depth,
         CancellationToken cancellationToken)
     {
+        if (depth > MaxSitemapDepth)
+        {
+            _logger.LogWarning("Sitemap recursion depth exceeded at {Url}", url);
+            return;
+        }
+
+        if (collectedUrls.Count >= MaxTotalUrls)
+        {
+            _logger.LogWarning("Maximum URL count ({Max}) reached; stopping sitemap crawl", MaxTotalUrls);
+            return;
+        }
+
+        // Validate that the sitemap URL is on the allowed host (prevents SSRF via malicious sitemaps)
+        if (!IsAllowedUrl(url, allowedHost))
+        {
+            _logger.LogWarning("Skipping sitemap URL from disallowed host: {Url}", url);
+            return;
+        }
+
         if (!visitedSitemaps.Add(url))
         {
             _logger.LogDebug("Already visited sitemap {Url}, skipping", url);
@@ -57,12 +89,20 @@ public class SitemapService : ISitemapService
             {
                 foreach (var pageUrl in parsedUrls)
                 {
-                    collectedUrls.Add(pageUrl);
+                    // Only collect page URLs on the allowed host
+                    if (IsAllowedUrl(pageUrl, allowedHost))
+                    {
+                        collectedUrls.Add(pageUrl);
+                    }
+                    else
+                    {
+                        _logger.LogDebug("Skipping off-host page URL: {Url}", pageUrl);
+                    }
                 }
 
                 foreach (var childSitemap in childSitemaps)
                 {
-                    await ProcessSitemapUrlAsync(childSitemap, collectedUrls, visitedSitemaps, cancellationToken);
+                    await ProcessSitemapUrlAsync(childSitemap, allowedHost, collectedUrls, visitedSitemaps, depth + 1, cancellationToken);
                 }
             }
             else
@@ -78,6 +118,17 @@ public class SitemapService : ISitemapService
         {
             _logger.LogError(ex, "Error processing sitemap {Url}", url);
         }
+    }
+
+    private static bool IsAllowedUrl(string url, string allowedHost)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            return false;
+
+        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+            return false;
+
+        return string.Equals(uri.Host, allowedHost, StringComparison.OrdinalIgnoreCase);
     }
 
     private bool TryParseAsSitemapXml(

@@ -130,8 +130,8 @@
     @if (isRunning)
     {
         <script>
-            const jobId = '@Model.Id';
-            const statusUrl = '/Comparison/StatusJson?id=' + jobId;
+            const jobId = @Json.Serialize(Model.Id);
+            const statusUrl = '/Comparison/StatusJson?id=' + encodeURIComponent(jobId);
 
             function poll() {
                 fetch(statusUrl)

@@ -201,6 +201,7 @@ public class ComparisonJobService : IComparisonJobService
         // Save screenshots
         var pageDir = Path.Combine(screenshotDir, SanitizePathSegment(comparison.RelativePath));
         Directory.CreateDirectory(pageDir);
+        EnsurePathIsInsideBase(screenshotDir, pageDir);
 
         var prdPath = Path.Combine(pageDir, "prd.png");
         var tstPath = Path.Combine(pageDir, "tst.png");
@@ -244,9 +245,25 @@ public class ComparisonJobService : IComparisonJobService
 
     private static string SanitizePathSegment(string path)
     {
-        // Replace path separators and invalid characters to create a safe directory name
-        var invalid = Path.GetInvalidFileNameChars().Concat(new[] { '/', '\\', ':' }).ToArray();
-        var sanitized = string.Join("_", path.Split(invalid, StringSplitOptions.RemoveEmptyEntries));
-        return sanitized.Length > 100 ? sanitized[..100] : sanitized;
+        // Whitelist: only alphanumeric, hyphen, dot, tilde — no directory separators
+        var sanitized = System.Text.RegularExpressions.Regex.Replace(path, @"[^a-zA-Z0-9\-._~]", "_");
+
+        // Remove leading/trailing dots and underscores to avoid hidden-file names
+        sanitized = sanitized.Trim('.', '_');
+
+        if (string.IsNullOrWhiteSpace(sanitized))
+            sanitized = "root";
+
+        return sanitized.Length > 120 ? sanitized[..120] : sanitized;
+    }
+
+    private static void EnsurePathIsInsideBase(string basePath, string filePath)
+    {
+        var fullBase = Path.GetFullPath(basePath) + Path.DirectorySeparatorChar;
+        var fullFile = Path.GetFullPath(filePath);
+        if (!fullFile.StartsWith(fullBase, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"Path escapes the base directory: {filePath}");
+        }
     }
 }
