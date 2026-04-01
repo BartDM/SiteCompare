@@ -1,0 +1,174 @@
+@model SiteCompare.Models.PageComparison
+@{
+    ViewData["Title"] = "Page Detail";
+    var job = ViewBag.Job as SiteCompare.Models.ComparisonJob;
+}
+
+<div class="mb-3">
+    <a asp-controller="Comparison" asp-action="Results" asp-route-id="@job?.Id" class="btn btn-sm btn-outline-secondary">
+        ← Back to Results
+    </a>
+</div>
+
+<div class="card shadow-sm mb-3">
+    <div class="card-header @(Model.HasDifferences ? "bg-danger text-white" : "bg-success text-white")">
+        <h5 class="mb-0">
+            @(Model.HasDifferences ? "⚠ Differences Found" : "✓ Pages Match")
+            &mdash; <code>@Model.RelativePath</code>
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="row g-2 mb-2">
+            <div class="col-md-6">
+                <strong>PRD:</strong> <a href="@Model.PrdUrl" target="_blank">@Model.PrdUrl</a>
+            </div>
+            <div class="col-md-6">
+                <strong>TST:</strong> <a href="@Model.TstUrl" target="_blank">@Model.TstUrl</a>
+            </div>
+        </div>
+        <div class="row g-2">
+            <div class="col-md-4">
+                <strong>Pixel Difference:</strong>
+                <span class="fw-bold @(Model.HasDifferences ? "text-danger" : "text-success")">
+                    @Model.DifferencePercentage.ToString("F4")%
+                </span>
+            </div>
+            <div class="col-md-4">
+                <strong>Threshold:</strong> @job?.DifferenceThreshold%
+            </div>
+            <div class="col-md-4">
+                <strong>Viewport:</strong> @job?.ViewportWidth × @job?.ViewportHeight px
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Screenshot tabs -->
+<ul class="nav nav-tabs mb-0" id="screenshotTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="side-by-side-tab" data-bs-toggle="tab" data-bs-target="#side-by-side" type="button" role="tab">
+            Side by Side
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="diff-tab" data-bs-toggle="tab" data-bs-target="#diff-panel" type="button" role="tab">
+            Diff View
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="overlay-tab" data-bs-toggle="tab" data-bs-target="#overlay-panel" type="button" role="tab">
+            Overlay Slider
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content border border-top-0 rounded-bottom p-3 bg-light" id="screenshotTabContent">
+
+    <!-- Side by side -->
+    <div class="tab-pane fade show active" id="side-by-side" role="tabpanel">
+        <div class="row g-2">
+            <div class="col-md-6">
+                <p class="fw-semibold text-center mb-1">🌐 PRD</p>
+                @if (!string.IsNullOrEmpty(Model.PrdScreenshotUrl))
+                {
+                    <a href="@Model.PrdScreenshotUrl" target="_blank">
+                        <img src="@Model.PrdScreenshotUrl" class="img-fluid rounded border" alt="PRD screenshot" style="max-height:600px; object-fit:cover; object-position:top;" />
+                    </a>
+                }
+                else
+                {
+                    <div class="alert alert-warning">No PRD screenshot available.</div>
+                }
+            </div>
+            <div class="col-md-6">
+                <p class="fw-semibold text-center mb-1">🧪 TST</p>
+                @if (!string.IsNullOrEmpty(Model.TstScreenshotUrl))
+                {
+                    <a href="@Model.TstScreenshotUrl" target="_blank">
+                        <img src="@Model.TstScreenshotUrl" class="img-fluid rounded border" alt="TST screenshot" style="max-height:600px; object-fit:cover; object-position:top;" />
+                    </a>
+                }
+                else
+                {
+                    <div class="alert alert-warning">No TST screenshot available.</div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- Diff view -->
+    <div class="tab-pane fade" id="diff-panel" role="tabpanel">
+        <p class="text-muted small mb-2">Red pixels indicate differences; dark pixels are unchanged areas for context.</p>
+        @if (!string.IsNullOrEmpty(Model.DiffImageUrl))
+        {
+            <a href="@Model.DiffImageUrl" target="_blank">
+                <img src="@Model.DiffImageUrl" class="img-fluid rounded border" alt="Diff image" />
+            </a>
+        }
+        else
+        {
+            <div class="alert alert-warning">No diff image available.</div>
+        }
+    </div>
+
+    <!-- Overlay slider -->
+    <div class="tab-pane fade" id="overlay-panel" role="tabpanel">
+        <p class="text-muted small mb-2">Drag the slider to compare PRD (left) and TST (right).</p>
+        @if (!string.IsNullOrEmpty(Model.PrdScreenshotUrl) && !string.IsNullOrEmpty(Model.TstScreenshotUrl))
+        {
+            <div id="overlayContainer" class="position-relative border rounded overflow-hidden" style="max-width:100%; user-select:none;">
+                <img id="imgTst" src="@Model.TstScreenshotUrl" class="d-block w-100" alt="TST" />
+                <div id="overlayPrd" class="position-absolute top-0 start-0 overflow-hidden" style="width:50%;">
+                    <img src="@Model.PrdScreenshotUrl" class="d-block" style="max-width:none; width:100vw;" alt="PRD" />
+                </div>
+                <div id="sliderHandle" class="position-absolute top-0 start-50 translate-middle-x h-100 d-flex align-items-center"
+                     style="width:4px; background:white; cursor:ew-resize; z-index:10;">
+                    <div class="position-absolute start-50 translate-middle-x bg-white border rounded-circle d-flex align-items-center justify-content-center"
+                         style="width:32px; height:32px; top:50%; font-size:1.1rem;">↔</div>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="alert alert-warning">Screenshots not available for overlay view.</div>
+        }
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // Overlay slider logic
+        const container = document.getElementById('overlayContainer');
+        const overlayPrd = document.getElementById('overlayPrd');
+        const handle = document.getElementById('sliderHandle');
+
+        if (container && overlayPrd && handle) {
+            let dragging = false;
+
+            handle.addEventListener('mousedown', () => dragging = true);
+            document.addEventListener('mouseup', () => dragging = false);
+            document.addEventListener('mousemove', (e) => {
+                if (!dragging) return;
+                const rect = container.getBoundingClientRect();
+                const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+                const pct = x / rect.width * 100;
+                overlayPrd.style.width = pct + '%';
+                handle.style.left = pct + '%';
+                handle.style.transform = 'translateX(-50%)';
+            });
+
+            // Touch support
+            handle.addEventListener('touchstart', (e) => { dragging = true; e.preventDefault(); });
+            document.addEventListener('touchend', () => dragging = false);
+            document.addEventListener('touchmove', (e) => {
+                if (!dragging) return;
+                const rect = container.getBoundingClientRect();
+                const x = Math.max(0, Math.min(e.touches[0].clientX - rect.left, rect.width));
+                const pct = x / rect.width * 100;
+                overlayPrd.style.width = pct + '%';
+                handle.style.left = pct + '%';
+                handle.style.transform = 'translateX(-50%)';
+            });
+        }
+    </script>
+}

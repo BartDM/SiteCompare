@@ -1,0 +1,94 @@
+@model List<SiteCompare.Models.ComparisonJob>
+@{
+    ViewData["Title"] = "Comparison History";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3>📋 Comparison History</h3>
+    <a asp-controller="Home" asp-action="Index" class="btn btn-primary">+ New Comparison</a>
+</div>
+
+@if (!Model.Any())
+{
+    <div class="alert alert-info">
+        No comparisons yet. <a asp-controller="Home" asp-action="Index">Start a new comparison</a>.
+    </div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead class="table-dark">
+                <tr>
+                    <th>PRD URL</th>
+                    <th>TST URL</th>
+                    <th>Status</th>
+                    <th>Pages</th>
+                    <th>Different</th>
+                    <th>Errors</th>
+                    <th>Started</th>
+                    <th>Duration</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var job in Model)
+                {
+                    <tr>
+                        <td><small><a href="@job.PrdBaseUrl" target="_blank">@job.PrdBaseUrl</a></small></td>
+                        <td><small><a href="@job.TstBaseUrl" target="_blank">@job.TstBaseUrl</a></small></td>
+                        <td>
+                            @if (job.Status == SiteCompare.Models.ComparisonStatus.Completed)
+                            {
+                                <span class="badge bg-success">Completed</span>
+                            }
+                            else if (job.Status == SiteCompare.Models.ComparisonStatus.Running)
+                            {
+                                <span class="badge bg-warning text-dark">Running</span>
+                            }
+                            else if (job.Status == SiteCompare.Models.ComparisonStatus.Failed)
+                            {
+                                <span class="badge bg-danger" title="@job.ErrorMessage">Failed</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">Pending</span>
+                            }
+                        </td>
+                        <td>@job.TotalPages</td>
+                        <td>
+                            @if (job.DifferentPages > 0)
+                            {
+                                <span class="text-danger fw-bold">@job.DifferentPages</span>
+                            }
+                            else
+                            {
+                                @job.DifferentPages
+                            }
+                        </td>
+                        <td>@job.ErrorPages</td>
+                        <td><small>@job.StartedAt.ToString("g")</small></td>
+                        <td>
+                            @if (job.CompletedAt.HasValue)
+                            {
+                                <small>@((job.CompletedAt.Value - job.StartedAt).ToString(@"mm\:ss"))</small>
+                            }
+                        </td>
+                        <td>
+                            @if (job.Status == SiteCompare.Models.ComparisonStatus.Completed)
+                            {
+                                <a asp-controller="Comparison" asp-action="Results" asp-route-id="@job.Id"
+                                   class="btn btn-sm btn-outline-primary">Results</a>
+                            }
+                            else
+                            {
+                                <a asp-controller="Comparison" asp-action="Status" asp-route-id="@job.Id"
+                                   class="btn btn-sm btn-outline-secondary">View</a>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
