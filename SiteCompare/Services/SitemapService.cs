@@ -89,6 +89,13 @@ public class SitemapService : ISitemapService
             {
                 foreach (var pageUrl in parsedUrls)
                 {
+                    // Skip URLs that belong to the sollicitatie-flow
+                    if (pageUrl.Contains("/sollicitatie-flow/", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _logger.LogDebug("Skipping sollicitatie-flow URL: {Url}", pageUrl);
+                        continue;
+                    }
+
                     // Only collect page URLs on the allowed host
                     if (IsAllowedUrl(pageUrl, allowedHost))
                     {

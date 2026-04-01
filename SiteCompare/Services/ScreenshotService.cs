@@ -45,10 +45,25 @@ public class ScreenshotService : IScreenshotService, IAsyncDisposable
         {
             _logger.LogDebug("Taking screenshot of {Url}", url);
 
+            var uri = new Uri(url);
+            var cookieDomain = uri.Host;
+
             var context = await _browser.NewContextAsync(new BrowserNewContextOptions
             {
                 ViewportSize = new ViewportSize { Width = width, Height = height },
                 IgnoreHTTPSErrors = true
+            });
+
+            // Inject cookie consent cookie so the banner is suppressed before the page loads
+            await context.AddCookiesAsync(new[]
+            {
+                new Cookie
+                {
+                    Name = "CookieConsent",
+                    Value = "{stamp:%27efjUKhnYspkBkWsl26uugwz5XI7N0sskgnBwq4i6jcN1uHYJlLgAYg==%27%2Cnecessary:true%2Cpreferences:true%2Cstatistics:true%2Cmarketing:true%2Cmethod:%27explicit%27%2Cver:6%2Cutc:1775044048173%2Cregion:%27be%27}",
+                    Domain = cookieDomain,
+                    Path = "/"
+                }
             });
 
             try
@@ -57,14 +72,30 @@ public class ScreenshotService : IScreenshotService, IAsyncDisposable
 
                 try
                 {
-                    var response = await page.GotoAsync(url, new PageGotoOptions
+                    _ = await page.GotoAsync(url, new PageGotoOptions
                     {
                         WaitUntil = WaitUntilState.NetworkIdle,
                         Timeout = 30000
                     });
 
-                    // Wait a moment for any animations or lazy-loaded content
-                    await page.WaitForTimeoutAsync(1500);
+                    // Wait at least 3 seconds for the cookie banner to appear, then dismiss it if still present
+                    await page.WaitForTimeoutAsync(3000);
+
+                    try
+                    {
+                        var acceptButton = page.Locator("button.c-button.cb-accept.cb-view");
+                        if (await acceptButton.IsVisibleAsync())
+                        {
+                            _logger.LogDebug("Cookie banner detected on {Url}, clicking accept button", url);
+                            await acceptButton.ClickAsync();
+                            // Wait for the banner to disappear
+                            await page.WaitForTimeoutAsync(500);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Cookie banner check failed on {Url}, continuing anyway", url);
+                    }
 
                     var screenshot = await page.ScreenshotAsync(new PageScreenshotOptions
                     {

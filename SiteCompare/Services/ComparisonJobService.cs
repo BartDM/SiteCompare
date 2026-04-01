@@ -94,6 +94,9 @@ public class ComparisonJobService : IComparisonJobService
                 return;
             }
 
+            // TODO: Remove this limit before production use
+            allUrls = allUrls.Take(5).ToList();
+
             job.TotalPages = allUrls.Count;
             _logger.LogInformation("Job {JobId}: Found {Count} URLs to compare", jobId, allUrls.Count);
 
