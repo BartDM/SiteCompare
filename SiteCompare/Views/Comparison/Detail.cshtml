@@ -46,6 +46,12 @@
                 <span class="badge bg-info text-dark">Whitespace differences ignored</span>
             </div>
         }
+        @if (job?.MaxUrls > 0)
+        {
+            <div class="mt-2">
+                <span class="badge bg-secondary">URL limit: @job.MaxUrls</span>
+            </div>
+        }
     </div>
 </div>
 

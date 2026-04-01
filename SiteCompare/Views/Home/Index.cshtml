@@ -68,6 +68,15 @@
                     </div>
 
                     <div class="mb-3">
+                        <label asp-for="MaxUrls" class="form-label fw-semibold">Max URLs to compare</label>
+                        <input asp-for="MaxUrls" class="form-control" type="number" min="0" max="50000" />
+                        <span asp-validation-for="MaxUrls" class="text-danger small"></span>
+                        <div class="form-text">
+                            Limit the number of pages compared (useful for quick test runs). Set to <strong>0</strong> to compare all pages.
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
                         <div class="form-check">
                             <input asp-for="IgnoreWhitespaceDifferences" class="form-check-input" type="checkbox" />
                             <label asp-for="IgnoreWhitespaceDifferences" class="form-check-label fw-semibold">

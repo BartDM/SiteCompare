@@ -55,7 +55,8 @@ public class ComparisonController : Controller
             model.DifferenceThreshold,
             model.ViewportWidth,
             model.ViewportHeight,
-            model.IgnoreWhitespaceDifferences);
+            model.IgnoreWhitespaceDifferences,
+            model.MaxUrls);
 
         // Fire-and-forget background task
         _ = Task.Run(async () =>

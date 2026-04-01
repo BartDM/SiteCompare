@@ -27,7 +27,7 @@ public class ComparisonJobService : IComparisonJobService
         _logger = logger;
     }
 
-    public ComparisonJob CreateJob(string prdBaseUrl, string tstBaseUrl, string sitemapPath, double threshold, int viewportWidth, int viewportHeight, bool ignoreWhitespaceDifferences = false)
+    public ComparisonJob CreateJob(string prdBaseUrl, string tstBaseUrl, string sitemapPath, double threshold, int viewportWidth, int viewportHeight, bool ignoreWhitespaceDifferences = false, int maxUrls = 0)
     {
         var job = new ComparisonJob
         {
@@ -37,7 +37,8 @@ public class ComparisonJobService : IComparisonJobService
             DifferenceThreshold = threshold,
             ViewportWidth = viewportWidth,
             ViewportHeight = viewportHeight,
-            IgnoreWhitespaceDifferences = ignoreWhitespaceDifferences
+            IgnoreWhitespaceDifferences = ignoreWhitespaceDifferences,
+            MaxUrls = maxUrls
         };
 
         _jobs[job.Id] = job;
@@ -97,6 +98,14 @@ public class ComparisonJobService : IComparisonJobService
 
             job.TotalPages = allUrls.Count;
             _logger.LogInformation("Job {JobId}: Found {Count} URLs to compare", jobId, allUrls.Count);
+
+            // Apply URL limit when set (> 0), so users can run quick test comparisons
+            if (job.MaxUrls > 0 && allUrls.Count > job.MaxUrls)
+            {
+                allUrls = allUrls.Take(job.MaxUrls).ToList();
+                job.TotalPages = allUrls.Count;
+                _logger.LogInformation("Job {JobId}: URL list capped to {Max} URLs", jobId, job.MaxUrls);
+            }
 
             // Create screenshot directory for this job
             var screenshotDir = Path.Combine(_environment.WebRootPath, "screenshots", jobId);
