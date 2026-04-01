@@ -1,3 +1,13 @@
+/* Demebako brand color palette */
+:root {
+  --dmb-navy:        #2C4B5A;
+  --dmb-teal:        #3BA5A8;
+  --dmb-teal-dark:   #2D7F85;
+  --dmb-orange:      #E87B2A;
+  --dmb-orange-dark: #C96819;
+  --dmb-silver:      #B8CBCF;
+}
+
 html {
   font-size: 14px;
 }
@@ -8,10 +18,6 @@ html {
   }
 }
 
-.btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
-  box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
-}
-
 html {
   position: relative;
   min-height: 100%;
@@ -19,4 +25,59 @@ html {
 
 body {
   margin-bottom: 60px;
+}
+
+/* Brand link colors */
+a {
+  color: var(--dmb-teal);
+}
+
+a:hover {
+  color: var(--dmb-teal-dark);
+}
+
+/* Navbar: brand navy */
+header .navbar {
+  background-color: var(--dmb-navy) !important;
+}
+
+/* bg-primary: brand teal */
+.bg-primary {
+  background-color: var(--dmb-teal) !important;
+}
+
+/* btn-primary: brand orange */
+.btn-primary {
+  color: #fff;
+  background-color: var(--dmb-orange);
+  border-color: var(--dmb-orange);
+}
+
+.btn-primary:hover,
+.btn-primary:focus,
+.btn-primary:active,
+.btn-primary.active,
+.show > .btn-primary.dropdown-toggle {
+  color: #fff;
+  background-color: var(--dmb-orange-dark);
+  border-color: var(--dmb-orange-dark);
+}
+
+.btn-primary:focus,
+.btn-primary:active:focus {
+  box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem var(--dmb-orange);
+}
+
+/* nav-pills active: brand teal */
+.nav-pills .nav-link.active,
+.nav-pills .show > .nav-link {
+  color: #fff;
+  background-color: var(--dmb-teal);
+  border-color: var(--dmb-teal-dark);
+}
+
+/* Focus rings: brand orange accent */
+.btn:focus, .btn:active:focus, .btn-link.nav-link:focus,
+.form-control:focus, .form-check-input:focus {
+  box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem var(--dmb-orange);
 }
