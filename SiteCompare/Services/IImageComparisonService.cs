@@ -2,7 +2,7 @@ namespace SiteCompare.Services;
 
 public interface IImageComparisonService
 {
-    ComparisonResult Compare(byte[] imageA, byte[] imageB);
+    ComparisonResult Compare(byte[] imageA, byte[] imageB, bool ignoreWhitespaceDifferences = false);
 }
 
 public class ComparisonResult

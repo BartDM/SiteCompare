@@ -13,9 +13,10 @@ public class ImageComparisonService : IImageComparisonService
         _logger = logger;
     }
 
-    public ComparisonResult Compare(byte[] imageA, byte[] imageB)
+    public ComparisonResult Compare(byte[] imageA, byte[] imageB, bool ignoreWhitespaceDifferences = false)
     {
-        _logger.LogDebug("Starting image comparison: imageA={SizeA} bytes, imageB={SizeB} bytes", imageA.Length, imageB.Length);
+        _logger.LogDebug("Starting image comparison: imageA={SizeA} bytes, imageB={SizeB} bytes, ignoreWhitespace={IgnoreWhitespace}",
+            imageA.Length, imageB.Length, ignoreWhitespaceDifferences);
 
         using var imgA = Image.Load<Rgba32>(imageA);
         using var imgB = Image.Load<Rgba32>(imageB);
@@ -51,7 +52,7 @@ public class ImageComparisonService : IImageComparisonService
                     var pixA = rowA[x];
                     var pixB = rowB[x];
 
-                    if (PixelsDiffer(pixA, pixB))
+                    if (PixelsDiffer(pixA, pixB) && !(ignoreWhitespaceDifferences && BothWhitespace(pixA, pixB)))
                     {
                         System.Threading.Interlocked.Increment(ref differentPixels);
                         diffPixels[y * targetWidth + x] = new Rgba32(255, 0, 0, 200);
@@ -77,7 +78,8 @@ public class ImageComparisonService : IImageComparisonService
             "Image comparison: {Different}/{Total} different pixels ({Percentage:F2}%)",
             differentPixels, totalPixels, differencePercentage);
 
-        if (differencePercentage > 50.0)
+        const double HighDifferenceThreshold = 50.0;
+        if (differencePercentage > HighDifferenceThreshold)
         {
             _logger.LogWarning("High pixel difference detected: {Percentage:F2}% — pages may be substantially different", differencePercentage);
         }
@@ -120,5 +122,19 @@ public class ImageComparisonService : IImageComparisonService
         return Math.Abs(a.R - b.R) > tolerance
             || Math.Abs(a.G - b.G) > tolerance
             || Math.Abs(a.B - b.B) > tolerance;
+    }
+
+    /// <summary>
+    /// Returns true when both pixels are white or near-white (i.e. blank whitespace regions).
+    /// Differences between such pixels are ignored when <c>IgnoreWhitespaceDifferences</c> is enabled,
+    /// because they represent empty space that has not caused any visible content to shift.
+    /// If whitespace addition shifts content elements, those elements will appear at different positions
+    /// in the two images as non-white pixels, so they will still be detected as differences.
+    /// </summary>
+    private static bool BothWhitespace(Rgba32 a, Rgba32 b)
+    {
+        const int whiteThreshold = 240;
+        return a.R >= whiteThreshold && a.G >= whiteThreshold && a.B >= whiteThreshold
+            && b.R >= whiteThreshold && b.G >= whiteThreshold && b.B >= whiteThreshold;
     }
 }

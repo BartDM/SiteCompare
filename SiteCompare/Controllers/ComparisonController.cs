@@ -62,7 +62,9 @@ public class ComparisonController : Controller
             model.SitemapPath,
             model.DifferenceThreshold,
             model.ViewportWidth,
-            model.ViewportHeight);
+            model.ViewportHeight,
+            model.IgnoreWhitespaceDifferences,
+            model.MaxUrls);
 
         _logger.LogInformation("Created comparison job {JobId} for PRD={PrdUrl} vs TST={TstUrl}",
             job.Id, Sanitize(job.PrdBaseUrl), Sanitize(job.TstBaseUrl));

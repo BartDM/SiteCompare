@@ -161,7 +161,7 @@ public class SitemapService : ISitemapService
                     var loc = sitemap.Elements()
                         .FirstOrDefault(e => e.Name.LocalName.Equals("loc", StringComparison.OrdinalIgnoreCase))?.Value.Trim();
 
-                    if (!string.IsNullOrEmpty(loc))
+                    if (!string.IsNullOrEmpty(loc) && !loc.Contains("/sollicitatie-flow/", StringComparison.OrdinalIgnoreCase))
                     {
                         childSitemaps.Add(loc);
                     }
