@@ -89,13 +89,6 @@ public class SitemapService : ISitemapService
             {
                 foreach (var pageUrl in parsedUrls)
                 {
-                    // Skip URLs that belong to the sollicitatie-flow
-                    if (pageUrl.Contains("/sollicitatie-flow/", StringComparison.OrdinalIgnoreCase))
-                    {
-                        _logger.LogDebug("Skipping sollicitatie-flow URL: {Url}", pageUrl);
-                        continue;
-                    }
-
                     // Only collect page URLs on the allowed host
                     if (IsAllowedUrl(pageUrl, allowedHost))
                     {
@@ -168,7 +161,7 @@ public class SitemapService : ISitemapService
                     var loc = sitemap.Elements()
                         .FirstOrDefault(e => e.Name.LocalName.Equals("loc", StringComparison.OrdinalIgnoreCase))?.Value.Trim();
 
-                    if (!string.IsNullOrEmpty(loc))
+                    if (!string.IsNullOrEmpty(loc) && !loc.Contains("/sollicitatie-flow/", StringComparison.OrdinalIgnoreCase))
                     {
                         childSitemaps.Add(loc);
                     }

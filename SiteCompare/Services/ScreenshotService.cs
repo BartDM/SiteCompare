@@ -8,6 +8,7 @@ public class ScreenshotService : IScreenshotService, IAsyncDisposable
     private IPlaywright? _playwright;
     private IBrowser? _browser;
     private readonly SemaphoreSlim _semaphore = new(4, 4); // Max 4 concurrent screenshots
+    private readonly SemaphoreSlim _initializeLock = new(1, 1);
 
     public ScreenshotService(ILogger<ScreenshotService> logger)
     {
@@ -16,45 +17,94 @@ public class ScreenshotService : IScreenshotService, IAsyncDisposable
 
     public async Task InitializeAsync()
     {
-        _playwright = await Playwright.CreateAsync();
-        _browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
-        {
-            Headless = true,
-            Args = new[]
-            {
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-gpu"
-            }
-        });
+        await EnsureBrowserInitializedAsync();
+    }
 
-        _logger.LogInformation("Playwright browser initialized");
+    private async Task EnsureBrowserInitializedAsync()
+    {
+        if (_browser is { IsConnected: true })
+            return;
+
+        await _initializeLock.WaitAsync();
+        try
+        {
+            if (_browser is { IsConnected: true })
+                return;
+
+            if (_browser != null)
+            {
+                await SafeCloseBrowserAsync(_browser);
+                _browser = null;
+            }
+
+            _playwright?.Dispose();
+            _playwright = await Playwright.CreateAsync();
+            _browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
+            {
+                Headless = true,
+                Args = new[]
+                {
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu"
+                }
+            });
+
+            _browser.Disconnected += (_, _) => _logger.LogWarning("Playwright browser disconnected");
+            _logger.LogInformation("Playwright browser initialized");
+        }
+        finally
+        {
+            _initializeLock.Release();
+        }
     }
 
     public async Task<byte[]?> TakeScreenshotAsync(string url, int width, int height, CancellationToken cancellationToken = default)
     {
-        if (_browser == null)
-        {
-            throw new InvalidOperationException("Browser is not initialized. Call InitializeAsync() first.");
-        }
+        await EnsureBrowserInitializedAsync();
 
         await _semaphore.WaitAsync(cancellationToken);
+        try
+        {
+            return await TryTakeScreenshotAsync(url, width, height, cancellationToken);
+        }
+        catch (PlaywrightException ex) when (IsTargetClosed(ex))
+        {
+            _logger.LogWarning(ex, "Browser target closed while capturing {Url}, reinitializing and retrying once", url);
+            await EnsureBrowserInitializedAsync();
+            return await TryTakeScreenshotAsync(url, width, height, cancellationToken);
+        }
+        finally
+        {
+            _semaphore.Release();
+        }
+    }
+
+    private async Task<byte[]?> TryTakeScreenshotAsync(string url, int width, int height, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var browser = _browser;
+        if (browser == null || !browser.IsConnected)
+        {
+            _logger.LogWarning("Cannot capture screenshot for {Url}: browser is not available", url);
+            return null;
+        }
+
+        _logger.LogDebug("Taking screenshot of {Url}", url);
+
+        var uri = new Uri(url);
+        var cookieDomain = uri.Host;
+
+        var context = await browser.NewContextAsync(new BrowserNewContextOptions
+        {
+            ViewportSize = new ViewportSize { Width = width, Height = height },
+            IgnoreHTTPSErrors = true
+        });
 
         try
         {
-            _logger.LogDebug("Taking screenshot of {Url}", url);
-
-            var uri = new Uri(url);
-            var cookieDomain = uri.Host;
-
-            var context = await _browser.NewContextAsync(new BrowserNewContextOptions
-            {
-                ViewportSize = new ViewportSize { Width = width, Height = height },
-                IgnoreHTTPSErrors = true
-            });
-
-            // Inject cookie consent cookie so the banner is suppressed before the page loads
             await context.AddCookiesAsync(new[]
             {
                 new Cookie
@@ -66,64 +116,56 @@ public class ScreenshotService : IScreenshotService, IAsyncDisposable
                 }
             });
 
+            var page = await context.NewPageAsync();
             try
             {
-                var page = await context.NewPageAsync();
+                cancellationToken.ThrowIfCancellationRequested();
+
+                _ = await page.GotoAsync(url, new PageGotoOptions
+                {
+                    WaitUntil = WaitUntilState.NetworkIdle,
+                    Timeout = 30000
+                });
+
+                await page.WaitForTimeoutAsync(3000);
 
                 try
                 {
-                    _ = await page.GotoAsync(url, new PageGotoOptions
+                    var acceptButton = page.Locator("button.c-button.cb-accept.cb-view");
+                    if (await acceptButton.IsVisibleAsync())
                     {
-                        WaitUntil = WaitUntilState.NetworkIdle,
-                        Timeout = 30000
-                    });
-
-                    // Wait at least 3 seconds for the cookie banner to appear, then dismiss it if still present
-                    await page.WaitForTimeoutAsync(3000);
-
-                    try
-                    {
-                        var acceptButton = page.Locator("button.c-button.cb-accept.cb-view");
-                        if (await acceptButton.IsVisibleAsync())
-                        {
-                            _logger.LogDebug("Cookie banner detected on {Url}, clicking accept button", url);
-                            await acceptButton.ClickAsync();
-                            // Wait for the banner to disappear
-                            await page.WaitForTimeoutAsync(500);
-                        }
+                        _logger.LogDebug("Cookie banner detected on {Url}, clicking accept button", url);
+                        await acceptButton.ClickAsync();
+                        await page.WaitForTimeoutAsync(500);
                     }
-                    catch (Exception ex)
-                    {
-                        _logger.LogDebug(ex, "Cookie banner check failed on {Url}, continuing anyway", url);
-                    }
-
-                    var screenshot = await page.ScreenshotAsync(new PageScreenshotOptions
-                    {
-                        FullPage = true,
-                        Type = ScreenshotType.Png
-                    });
-
-                    _logger.LogDebug("Screenshot taken for {Url} ({Bytes} bytes)", url, screenshot.Length);
-                    return screenshot;
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to take screenshot of {Url}", url);
-                    return null;
+                    _logger.LogDebug(ex, "Cookie banner check failed on {Url}, continuing anyway", url);
                 }
-                finally
+
+                var screenshot = await page.ScreenshotAsync(new PageScreenshotOptions
                 {
-                    await page.CloseAsync();
-                }
+                    FullPage = true,
+                    Type = ScreenshotType.Png
+                });
+
+                _logger.LogDebug("Screenshot taken for {Url} ({Bytes} bytes)", url, screenshot.Length);
+                return screenshot;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Failed to take screenshot of {Url}", url);
+                return null;
             }
             finally
             {
-                await context.CloseAsync();
+                await SafeClosePageAsync(page);
             }
         }
         finally
         {
-            _semaphore.Release();
+            await SafeCloseContextAsync(context);
         }
     }
 
@@ -131,12 +173,71 @@ public class ScreenshotService : IScreenshotService, IAsyncDisposable
     {
         if (_browser != null)
         {
-            await _browser.CloseAsync();
+            await SafeCloseBrowserAsync(_browser);
             _browser = null;
         }
 
         _playwright?.Dispose();
         _playwright = null;
+
+        _initializeLock.Dispose();
         _semaphore.Dispose();
     }
+
+    private async Task SafeClosePageAsync(IPage? page)
+    {
+        if (page == null)
+            return;
+
+        try
+        {
+            await page.CloseAsync();
+        }
+        catch (PlaywrightException ex) when (IsTargetClosed(ex))
+        {
+            // Already closed by browser/context shutdown.
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Ignoring page close error");
+        }
+    }
+
+    private async Task SafeCloseContextAsync(IBrowserContext? context)
+    {
+        if (context == null)
+            return;
+
+        try
+        {
+            await context.CloseAsync();
+        }
+        catch (PlaywrightException ex) when (IsTargetClosed(ex))
+        {
+            // Already closed by browser shutdown.
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Ignoring context close error");
+        }
+    }
+
+    private async Task SafeCloseBrowserAsync(IBrowser browser)
+    {
+        try
+        {
+            await browser.CloseAsync();
+        }
+        catch (PlaywrightException ex) when (IsTargetClosed(ex))
+        {
+            // Already closed.
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Ignoring browser close error");
+        }
+    }
+
+    private static bool IsTargetClosed(PlaywrightException ex) =>
+        ex.Message.Contains("Target page, context or browser has been closed", StringComparison.OrdinalIgnoreCase);
 }
