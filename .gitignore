@@ -3,6 +3,9 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/main/VisualStudio.gitignore
 
+# SiteCompare runtime data — screenshots are generated at runtime and not part of source
+SiteCompare/wwwroot/screenshots/*/
+
 # User-specific files
 *.rsuser
 *.suo

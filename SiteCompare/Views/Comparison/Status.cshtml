@@ -1,0 +1,157 @@
+@model SiteCompare.Models.ComparisonJob
+@{
+    ViewData["Title"] = "Comparison Status";
+    var isRunning = Model.Status == SiteCompare.Models.ComparisonStatus.Running
+                 || Model.Status == SiteCompare.Models.ComparisonStatus.Pending;
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card shadow-sm">
+            <div class="card-header d-flex justify-content-between align-items-center
+                @(Model.Status == SiteCompare.Models.ComparisonStatus.Completed ? "bg-success text-white" :
+                  Model.Status == SiteCompare.Models.ComparisonStatus.Failed    ? "bg-danger text-white" :
+                  "bg-primary text-white")">
+                <h4 class="mb-0">
+                    @if (Model.Status == SiteCompare.Models.ComparisonStatus.Running)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                    }
+                    Comparison @Model.Status
+                </h4>
+                @if (isRunning)
+                {
+                    <form asp-controller="Comparison" asp-action="Cancel" method="post" class="m-0">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <button type="submit" class="btn btn-sm btn-light">Cancel</button>
+                    </form>
+                }
+            </div>
+            <div class="card-body">
+                <dl class="row">
+                    <dt class="col-sm-3">PRD URL</dt>
+                    <dd class="col-sm-9"><a href="@Model.PrdBaseUrl" target="_blank">@Model.PrdBaseUrl</a></dd>
+
+                    <dt class="col-sm-3">TST URL</dt>
+                    <dd class="col-sm-9"><a href="@Model.TstBaseUrl" target="_blank">@Model.TstBaseUrl</a></dd>
+
+                    <dt class="col-sm-3">Sitemap Path</dt>
+                    <dd class="col-sm-9"><code>@Model.SitemapPath</code></dd>
+
+                    <dt class="col-sm-3">Threshold</dt>
+                    <dd class="col-sm-9">@Model.DifferenceThreshold%</dd>
+
+                    <dt class="col-sm-3">Started</dt>
+                    <dd class="col-sm-9">@Model.StartedAt.ToString("g") UTC</dd>
+
+                    @if (Model.CompletedAt.HasValue)
+                    {
+                        <dt class="col-sm-3">Completed</dt>
+                        <dd class="col-sm-9">@Model.CompletedAt.Value.ToString("g") UTC
+                            <span class="text-muted">(duration: @((Model.CompletedAt.Value - Model.StartedAt).ToString(@"mm\:ss")))</span>
+                        </dd>
+                    }
+                </dl>
+
+                @if (isRunning)
+                {
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between mb-1">
+                            <span id="statusText" class="text-muted small">@Model.CurrentPage</span>
+                            <span id="progressText" class="text-muted small">@Model.Progress%</span>
+                        </div>
+                        <div class="progress" style="height: 24px;">
+                            <div id="progressBar"
+                                 class="progress-bar progress-bar-striped progress-bar-animated"
+                                 role="progressbar"
+                                 style="width: @Model.Progress%"
+                                 aria-valuenow="@Model.Progress"
+                                 aria-valuemin="0"
+                                 aria-valuemax="100">
+                                @if (Model.TotalPages > 0)
+                                {
+                                    @($"{Model.Results.Count}/{Model.TotalPages} pages")
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+                {
+                    <div class="alert alert-danger mt-3" role="alert">
+                        <strong>Error:</strong> @Model.ErrorMessage
+                    </div>
+                }
+
+                @if (Model.Status == SiteCompare.Models.ComparisonStatus.Completed)
+                {
+                    <div class="row g-3 mt-2 text-center">
+                        <div class="col-4">
+                            <div class="card bg-light">
+                                <div class="card-body py-2">
+                                    <div class="h3 mb-0">@Model.TotalPages</div>
+                                    <small class="text-muted">Total Pages</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="card bg-danger text-white">
+                                <div class="card-body py-2">
+                                    <div class="h3 mb-0">@Model.DifferentPages</div>
+                                    <small>Different</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="card bg-success text-white">
+                                <div class="card-body py-2">
+                                    <div class="h3 mb-0">@Model.SamePages</div>
+                                    <small>Same</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-grid mt-4">
+                        <a asp-controller="Comparison" asp-action="Results" asp-route-id="@Model.Id"
+                           class="btn btn-primary btn-lg">
+                            📊 View Full Results
+                        </a>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @if (isRunning)
+    {
+        <script>
+            const jobId = '@Model.Id';
+            const statusUrl = '/Comparison/StatusJson?id=' + jobId;
+
+            function poll() {
+                fetch(statusUrl)
+                    .then(r => r.json())
+                    .then(data => {
+                        document.getElementById('progressBar').style.width = data.progress + '%';
+                        document.getElementById('progressBar').setAttribute('aria-valuenow', data.progress);
+                        document.getElementById('progressText').textContent = data.progress + '%';
+                        document.getElementById('statusText').textContent = data.currentPage || '';
+
+                        if (data.status === 'Completed' || data.status === 'Failed') {
+                            window.location.reload();
+                        } else {
+                            setTimeout(poll, 2000);
+                        }
+                    })
+                    .catch(() => setTimeout(poll, 5000));
+            }
+
+            setTimeout(poll, 2000);
+        </script>
+    }
+}

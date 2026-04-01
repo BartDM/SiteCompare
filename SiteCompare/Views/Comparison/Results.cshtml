@@ -1,0 +1,202 @@
+@model SiteCompare.Models.ComparisonJob
+@{
+    ViewData["Title"] = "Comparison Results";
+
+    var filter = ViewBag.Filter as string ?? "all";
+    var search = ViewBag.Search as string ?? "";
+    var sortBy = ViewBag.SortBy as string ?? "diff";
+
+    var results = Model.Results.AsEnumerable();
+
+    if (filter == "different")
+        results = results.Where(r => r.HasDifferences && r.Status == SiteCompare.Models.PageComparisonStatus.Success);
+    else if (filter == "same")
+        results = results.Where(r => !r.HasDifferences && r.Status == SiteCompare.Models.PageComparisonStatus.Success);
+    else if (filter == "error")
+        results = results.Where(r => r.Status == SiteCompare.Models.PageComparisonStatus.Error);
+
+    if (!string.IsNullOrEmpty(search))
+        results = results.Where(r => r.RelativePath.Contains(search, StringComparison.OrdinalIgnoreCase));
+
+    results = sortBy switch
+    {
+        "path" => results.OrderBy(r => r.RelativePath),
+        "diff" => results.OrderByDescending(r => r.DifferencePercentage),
+        _ => results.OrderByDescending(r => r.DifferencePercentage)
+    };
+
+    var filteredList = results.ToList();
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h3>📊 Results: @Model.PrdBaseUrl → @Model.TstBaseUrl</h3>
+        <small class="text-muted">Completed @Model.CompletedAt?.ToString("g") UTC</small>
+    </div>
+    <a asp-controller="Home" asp-action="Index" class="btn btn-outline-primary">+ New Comparison</a>
+</div>
+
+<!-- Summary cards -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="card text-center shadow-sm">
+            <div class="card-body">
+                <div class="h2 fw-bold mb-0">@Model.TotalPages</div>
+                <small class="text-muted">Total Pages</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card text-center shadow-sm bg-danger text-white">
+            <div class="card-body">
+                <div class="h2 fw-bold mb-0">@Model.DifferentPages</div>
+                <small>Differences Found</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card text-center shadow-sm bg-success text-white">
+            <div class="card-body">
+                <div class="h2 fw-bold mb-0">@Model.SamePages</div>
+                <small>Pages Match</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card text-center shadow-sm bg-secondary text-white">
+            <div class="card-body">
+                <div class="h2 fw-bold mb-0">@Model.ErrorPages</div>
+                <small>Errors</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter bar -->
+<form method="get" asp-action="Results" asp-route-id="@Model.Id" class="card card-body bg-light mb-3">
+    <div class="row g-2 align-items-end">
+        <div class="col-md-5">
+            <label class="form-label mb-1 small fw-semibold">Search</label>
+            <input type="text" name="search" value="@search" class="form-control form-control-sm" placeholder="Filter by URL path..." />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label mb-1 small fw-semibold">Filter</label>
+            <select name="filter" class="form-select form-select-sm">
+                <option value="all" selected="@(filter == "all")">All (@Model.TotalPages)</option>
+                <option value="different" selected="@(filter == "different")">Different (@Model.DifferentPages)</option>
+                <option value="same" selected="@(filter == "same")">Same (@Model.SamePages)</option>
+                <option value="error" selected="@(filter == "error")">Error (@Model.ErrorPages)</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label mb-1 small fw-semibold">Sort by</label>
+            <select name="sortBy" class="form-select form-select-sm">
+                <option value="diff" selected="@(sortBy == "diff")">Difference %</option>
+                <option value="path" selected="@(sortBy == "path")">Path</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <button type="submit" class="btn btn-primary btn-sm w-100">Apply</button>
+        </div>
+    </div>
+</form>
+
+<!-- Results table -->
+@if (filteredList.Count == 0)
+{
+    <div class="alert alert-info">No results match the selected filter.</div>
+}
+else
+{
+    <p class="text-muted small">Showing @filteredList.Count of @Model.TotalPages pages</p>
+    <div class="table-responsive">
+        <table class="table table-hover table-sm align-middle">
+            <thead class="table-dark sticky-top">
+                <tr>
+                    <th style="width:40%">Page Path</th>
+                    <th style="width:15%">Difference</th>
+                    <th style="width:10%">Status</th>
+                    <th style="width:10%">PRD</th>
+                    <th style="width:10%">TST</th>
+                    <th style="width:15%"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in filteredList)
+                {
+                    var rowClass = r.Status == SiteCompare.Models.PageComparisonStatus.Error ? "table-secondary"
+                                 : r.HasDifferences ? "table-danger"
+                                 : "table-success";
+
+                    <tr class="@rowClass">
+                        <td>
+                            <code class="small">@r.RelativePath</code>
+                        </td>
+                        <td>
+                            @if (r.Status == SiteCompare.Models.PageComparisonStatus.Success)
+                            {
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="progress flex-grow-1" style="height:8px;">
+                                        <div class="progress-bar @(r.HasDifferences ? "bg-danger" : "bg-success")"
+                                             style="width: @(Math.Min(r.DifferencePercentage, 100))%"></div>
+                                    </div>
+                                    <span class="small fw-semibold @(r.HasDifferences ? "text-danger" : "text-success")">
+                                        @r.DifferencePercentage.ToString("F2")%
+                                    </span>
+                                </div>
+                            }
+                        </td>
+                        <td>
+                            @if (r.Status == SiteCompare.Models.PageComparisonStatus.Success)
+                            {
+                                if (r.HasDifferences)
+                                {
+                                    <span class="badge bg-danger">Different</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-success">Same</span>
+                                }
+                            }
+                            else if (r.Status == SiteCompare.Models.PageComparisonStatus.Error)
+                            {
+                                <span class="badge bg-secondary" title="@r.ErrorMessage">Error</span>
+                            }
+                        </td>
+                        <td>
+                            @if (!string.IsNullOrEmpty(r.PrdScreenshotUrl))
+                            {
+                                <a href="@r.PrdScreenshotUrl" target="_blank" class="btn btn-sm btn-outline-secondary py-0">
+                                    <small>PRD 🖼</small>
+                                </a>
+                            }
+                        </td>
+                        <td>
+                            @if (!string.IsNullOrEmpty(r.TstScreenshotUrl))
+                            {
+                                <a href="@r.TstScreenshotUrl" target="_blank" class="btn btn-sm btn-outline-secondary py-0">
+                                    <small>TST 🖼</small>
+                                </a>
+                            }
+                        </td>
+                        <td>
+                            @if (r.Status == SiteCompare.Models.PageComparisonStatus.Success)
+                            {
+                                <a asp-controller="Comparison" asp-action="Detail"
+                                   asp-route-id="@Model.Id"
+                                   asp-route-path="@r.RelativePath"
+                                   class="btn btn-sm btn-primary py-0">
+                                    Compare →
+                                </a>
+                            }
+                            else if (!string.IsNullOrEmpty(r.ErrorMessage))
+                            {
+                                <span class="text-muted small" title="@r.ErrorMessage">⚠ @r.ErrorMessage.Substring(0, Math.Min(r.ErrorMessage.Length, 40))</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

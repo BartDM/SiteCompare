@@ -1,0 +1,149 @@
+﻿@model SiteCompare.Models.StartComparisonViewModel
+@{
+    ViewData["Title"] = "New Comparison";
+    var recentJobs = ViewBag.RecentJobs as List<SiteCompare.Models.ComparisonJob> ?? new();
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0">🔍 New Visual Comparison</h4>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">
+                    Compare two websites visually by crawling their sitemaps and taking full-page screenshots.
+                    The tool will highlight all pages where visual differences are detected.
+                </p>
+
+                <form asp-controller="Comparison" asp-action="Start" method="post">
+                    @Html.AntiForgeryToken()
+                    <div asp-validation-summary="ModelOnly" class="alert alert-danger" role="alert"></div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label asp-for="PrdBaseUrl" class="form-label fw-semibold">
+                                🌐 PRD (Production) Base URL
+                            </label>
+                            <input asp-for="PrdBaseUrl" class="form-control" placeholder="https://www.example.com" />
+                            <span asp-validation-for="PrdBaseUrl" class="text-danger small"></span>
+                            <div class="form-text">The production website base URL (without trailing slash).</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label asp-for="TstBaseUrl" class="form-label fw-semibold">
+                                🧪 TST (Test) Base URL
+                            </label>
+                            <input asp-for="TstBaseUrl" class="form-control" placeholder="https://tst.example.com" />
+                            <span asp-validation-for="TstBaseUrl" class="text-danger small"></span>
+                            <div class="form-text">The test website base URL (without trailing slash).</div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label asp-for="SitemapPath" class="form-label fw-semibold">Sitemap Path</label>
+                        <input asp-for="SitemapPath" class="form-control" placeholder="/nl/sitemaps/" />
+                        <span asp-validation-for="SitemapPath" class="text-danger small"></span>
+                        <div class="form-text">Path to the sitemap on the PRD site (e.g. <code>/nl/sitemaps/</code> or <code>/sitemap.xml</code>).</div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <label asp-for="DifferenceThreshold" class="form-label fw-semibold">
+                                Difference Threshold (%)
+                            </label>
+                            <input asp-for="DifferenceThreshold" class="form-control" type="number" min="0" max="100" step="0.1" />
+                            <span asp-validation-for="DifferenceThreshold" class="text-danger small"></span>
+                            <div class="form-text">Pages with more pixel difference than this will be flagged.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="ViewportWidth" class="form-label fw-semibold">Viewport Width (px)</label>
+                            <input asp-for="ViewportWidth" class="form-control" type="number" min="320" max="3840" />
+                            <span asp-validation-for="ViewportWidth" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="ViewportHeight" class="form-label fw-semibold">Viewport Height (px)</label>
+                            <input asp-for="ViewportHeight" class="form-control" type="number" min="480" max="2160" />
+                            <span asp-validation-for="ViewportHeight" class="text-danger small"></span>
+                        </div>
+                    </div>
+
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            🚀 Start Comparison
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        @if (recentJobs.Any())
+        {
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h5 class="mb-0">📋 Recent Comparisons</h5>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>PRD → TST</th>
+                                <th>Status</th>
+                                <th>Pages</th>
+                                <th>Started</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var job in recentJobs)
+                            {
+                                <tr>
+                                    <td>
+                                        <small class="text-muted">@job.PrdBaseUrl</small><br />
+                                        <small>→ @job.TstBaseUrl</small>
+                                    </td>
+                                    <td>
+                                        @if (job.Status == SiteCompare.Models.ComparisonStatus.Completed)
+                                        {
+                                            <span class="badge bg-success">Completed</span>
+                                        }
+                                        else if (job.Status == SiteCompare.Models.ComparisonStatus.Running)
+                                        {
+                                            <span class="badge bg-warning text-dark">Running</span>
+                                        }
+                                        else if (job.Status == SiteCompare.Models.ComparisonStatus.Failed)
+                                        {
+                                            <span class="badge bg-danger">Failed</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary">Pending</span>
+                                        }
+                                    </td>
+                                    <td>@job.TotalPages</td>
+                                    <td><small>@job.StartedAt.ToString("g")</small></td>
+                                    <td>
+                                        @if (job.Status == SiteCompare.Models.ComparisonStatus.Completed)
+                                        {
+                                            <a asp-controller="Comparison" asp-action="Results" asp-route-id="@job.Id" class="btn btn-sm btn-outline-primary">Results</a>
+                                        }
+                                        else
+                                        {
+                                            <a asp-controller="Comparison" asp-action="Status" asp-route-id="@job.Id" class="btn btn-sm btn-outline-secondary">View</a>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="card-footer text-end">
+                    <a asp-controller="Comparison" asp-action="History" class="btn btn-sm btn-link">View all comparisons →</a>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+}
