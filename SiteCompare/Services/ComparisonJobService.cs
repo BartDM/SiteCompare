@@ -27,7 +27,7 @@ public class ComparisonJobService : IComparisonJobService
         _logger = logger;
     }
 
-    public ComparisonJob CreateJob(string prdBaseUrl, string tstBaseUrl, string sitemapPath, double threshold, int viewportWidth, int viewportHeight)
+    public ComparisonJob CreateJob(string prdBaseUrl, string tstBaseUrl, string sitemapPath, double threshold, int viewportWidth, int viewportHeight, bool ignoreWhitespaceDifferences = false, int maxUrls = 0)
     {
         var job = new ComparisonJob
         {
@@ -36,7 +36,9 @@ public class ComparisonJobService : IComparisonJobService
             SitemapPath = sitemapPath,
             DifferenceThreshold = threshold,
             ViewportWidth = viewportWidth,
-            ViewportHeight = viewportHeight
+            ViewportHeight = viewportHeight,
+            IgnoreWhitespaceDifferences = ignoreWhitespaceDifferences,
+            MaxUrls = maxUrls
         };
 
         _jobs[job.Id] = job;
@@ -99,6 +101,14 @@ public class ComparisonJobService : IComparisonJobService
 
             job.TotalPages = allUrls.Count;
             _logger.LogInformation("Job {JobId}: Found {Count} URLs to compare", jobId, allUrls.Count);
+
+            // Apply URL limit when set (> 0), so users can run quick test comparisons
+            if (job.MaxUrls > 0 && allUrls.Count > job.MaxUrls)
+            {
+                allUrls = allUrls.Take(job.MaxUrls).ToList();
+                job.TotalPages = allUrls.Count;
+                _logger.LogInformation("Job {JobId}: URL list capped to {Max} URLs", jobId, job.MaxUrls);
+            }
 
             // Create screenshot directory for this job
             var screenshotDir = Path.Combine(_environment.WebRootPath, "screenshots", jobId);
@@ -214,7 +224,7 @@ public class ComparisonJobService : IComparisonJobService
         await File.WriteAllBytesAsync(tstPath, tstScreenshot, cancellationToken);
 
         // Compare images
-        var result = _imageComparisonService.Compare(prdScreenshot, tstScreenshot);
+        var result = _imageComparisonService.Compare(prdScreenshot, tstScreenshot, job.IgnoreWhitespaceDifferences);
 
         if (result.DiffImage != null)
         {
