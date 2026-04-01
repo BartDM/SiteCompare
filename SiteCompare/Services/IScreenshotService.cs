@@ -6,4 +6,4 @@ public interface IScreenshotService
     Task InitializeAsync();
 }
 
-public record ScreenshotResult(byte[] Data, string FinalUrl);
+public record ScreenshotResult(byte[] Data, string FinalUrl, int HttpStatusCode);

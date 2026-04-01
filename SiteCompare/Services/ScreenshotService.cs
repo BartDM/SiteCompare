@@ -121,13 +121,14 @@ public class ScreenshotService : IScreenshotService, IAsyncDisposable
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                _ = await page.GotoAsync(url, new PageGotoOptions
+                var response = await page.GotoAsync(url, new PageGotoOptions
                 {
                     WaitUntil = WaitUntilState.NetworkIdle,
                     Timeout = 30000
                 });
 
                 var finalUrl = page.Url;
+                var httpStatusCode = response?.Status ?? 0;
 
                 await page.WaitForTimeoutAsync(3000);
 
@@ -153,7 +154,7 @@ public class ScreenshotService : IScreenshotService, IAsyncDisposable
                 });
 
                 _logger.LogDebug("Screenshot taken for {Url} ({Bytes} bytes)", url, screenshot.Length);
-                return new ScreenshotResult(screenshot, finalUrl);
+                return new ScreenshotResult(screenshot, finalUrl, httpStatusCode);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

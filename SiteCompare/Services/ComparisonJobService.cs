@@ -211,8 +211,8 @@ public class ComparisonJobService : IComparisonJobService
             return;
         }
 
-        comparison.PrdIsNotFound = IsNotFoundUrl(prdResult.FinalUrl);
-        comparison.TstIsNotFound = IsNotFoundUrl(tstResult.FinalUrl);
+        comparison.PrdIsNotFound = IsNotFound(prdResult);
+        comparison.TstIsNotFound = IsNotFound(tstResult);
 
         var prdScreenshot = prdResult.Data;
         var tstScreenshot = tstResult.Data;
@@ -247,10 +247,13 @@ public class ComparisonJobService : IComparisonJobService
         comparison.Status = PageComparisonStatus.Success;
     }
 
+    private static bool IsNotFound(ScreenshotResult result) =>
+        result.HttpStatusCode == 404 || IsNotFoundUrl(result.FinalUrl);
+
     private static bool IsNotFoundUrl(string url) =>
         Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
-        uri.AbsolutePath.Split('/').Any(segment =>
-            segment.Equals("404", StringComparison.OrdinalIgnoreCase));
+        uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Contains("404", StringComparer.OrdinalIgnoreCase);
 
     private static string GetRelativePath(string absoluteUrl, string baseUrl)
     {
