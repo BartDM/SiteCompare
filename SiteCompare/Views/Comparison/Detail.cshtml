@@ -40,6 +40,12 @@
                 <strong>Viewport:</strong> @job?.ViewportWidth × @job?.ViewportHeight px
             </div>
         </div>
+        @if (job?.IgnoreWhitespaceDifferences == true)
+        {
+            <div class="mt-2">
+                <span class="badge bg-info text-dark">Whitespace differences ignored</span>
+            </div>
+        }
     </div>
 </div>
 

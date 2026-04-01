@@ -9,6 +9,7 @@ public class ComparisonJob
     public double DifferenceThreshold { get; set; } = 0.5;
     public int ViewportWidth { get; set; } = 1920;
     public int ViewportHeight { get; set; } = 1080;
+    public bool IgnoreWhitespaceDifferences { get; set; } = false;
     public ComparisonStatus Status { get; set; } = ComparisonStatus.Pending;
     public int Progress { get; set; }
     public int TotalPages { get; set; }

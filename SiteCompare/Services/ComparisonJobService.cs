@@ -27,7 +27,7 @@ public class ComparisonJobService : IComparisonJobService
         _logger = logger;
     }
 
-    public ComparisonJob CreateJob(string prdBaseUrl, string tstBaseUrl, string sitemapPath, double threshold, int viewportWidth, int viewportHeight)
+    public ComparisonJob CreateJob(string prdBaseUrl, string tstBaseUrl, string sitemapPath, double threshold, int viewportWidth, int viewportHeight, bool ignoreWhitespaceDifferences = false)
     {
         var job = new ComparisonJob
         {
@@ -36,7 +36,8 @@ public class ComparisonJobService : IComparisonJobService
             SitemapPath = sitemapPath,
             DifferenceThreshold = threshold,
             ViewportWidth = viewportWidth,
-            ViewportHeight = viewportHeight
+            ViewportHeight = viewportHeight,
+            IgnoreWhitespaceDifferences = ignoreWhitespaceDifferences
         };
 
         _jobs[job.Id] = job;
@@ -211,7 +212,7 @@ public class ComparisonJobService : IComparisonJobService
         await File.WriteAllBytesAsync(tstPath, tstScreenshot, cancellationToken);
 
         // Compare images
-        var result = _imageComparisonService.Compare(prdScreenshot, tstScreenshot);
+        var result = _imageComparisonService.Compare(prdScreenshot, tstScreenshot, job.IgnoreWhitespaceDifferences);
 
         if (result.DiffImage != null)
         {
