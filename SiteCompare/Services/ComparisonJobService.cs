@@ -40,8 +40,13 @@ public class ComparisonJobService : IComparisonJobService
         };
 
         _jobs[job.Id] = job;
+        _logger.LogInformation("Created job {JobId}: PRD={PrdUrl}, TST={TstUrl}, Sitemap={SitemapPath}, Threshold={Threshold}%, Viewport={Width}x{Height}",
+            job.Id, Sanitize(job.PrdBaseUrl), Sanitize(job.TstBaseUrl), Sanitize(job.SitemapPath), threshold, viewportWidth, viewportHeight);
         return job;
     }
+
+    private static string Sanitize(string? value) =>
+        value is null ? "(null)" : value.Replace('\r', ' ').Replace('\n', ' ');
 
     public ComparisonJob? GetJob(string jobId) =>
         _jobs.TryGetValue(jobId, out var job) ? job : null;

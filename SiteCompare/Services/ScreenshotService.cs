@@ -16,20 +16,29 @@ public class ScreenshotService : IScreenshotService, IAsyncDisposable
 
     public async Task InitializeAsync()
     {
-        _playwright = await Playwright.CreateAsync();
-        _browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
+        _logger.LogDebug("Initializing Playwright browser");
+        try
         {
-            Headless = true,
-            Args = new[]
+            _playwright = await Playwright.CreateAsync();
+            _browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
             {
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-gpu"
-            }
-        });
+                Headless = true,
+                Args = new[]
+                {
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu"
+                }
+            });
 
-        _logger.LogInformation("Playwright browser initialized");
+            _logger.LogInformation("Playwright browser initialized");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogCritical(ex, "Failed to initialize Playwright browser — screenshot capture is unavailable");
+            throw;
+        }
     }
 
     public async Task<byte[]?> TakeScreenshotAsync(string url, int width, int height, CancellationToken cancellationToken = default)
@@ -98,6 +107,7 @@ public class ScreenshotService : IScreenshotService, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        _logger.LogDebug("Disposing Playwright browser");
         if (_browser != null)
         {
             await _browser.CloseAsync();
@@ -107,5 +117,6 @@ public class ScreenshotService : IScreenshotService, IAsyncDisposable
         _playwright?.Dispose();
         _playwright = null;
         _semaphore.Dispose();
+        _logger.LogInformation("Playwright browser disposed");
     }
 }

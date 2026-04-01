@@ -15,12 +15,20 @@ public class ImageComparisonService : IImageComparisonService
 
     public ComparisonResult Compare(byte[] imageA, byte[] imageB)
     {
+        _logger.LogDebug("Starting image comparison: imageA={SizeA} bytes, imageB={SizeB} bytes", imageA.Length, imageB.Length);
+
         using var imgA = Image.Load<Rgba32>(imageA);
         using var imgB = Image.Load<Rgba32>(imageB);
 
         // Normalize sizes — pad to the larger dimensions so we compare identical canvas sizes
         int targetWidth = Math.Max(imgA.Width, imgB.Width);
         int targetHeight = Math.Max(imgA.Height, imgB.Height);
+
+        if (imgA.Width != imgB.Width || imgA.Height != imgB.Height)
+        {
+            _logger.LogDebug("Image dimensions differ — normalizing canvas to {Width}x{Height} (imageA: {WA}x{HA}, imageB: {WB}x{HB})",
+                targetWidth, targetHeight, imgA.Width, imgA.Height, imgB.Width, imgB.Height);
+        }
 
         using var normalA = NormalizeTo(imgA, targetWidth, targetHeight);
         using var normalB = NormalizeTo(imgB, targetWidth, targetHeight);
@@ -65,6 +73,15 @@ public class ImageComparisonService : IImageComparisonService
             ? (double)differentPixels / totalPixels * 100.0
             : 0.0;
 
+        _logger.LogDebug(
+            "Image comparison: {Different}/{Total} different pixels ({Percentage:F2}%)",
+            differentPixels, totalPixels, differencePercentage);
+
+        if (differencePercentage > 50.0)
+        {
+            _logger.LogWarning("High pixel difference detected: {Percentage:F2}% — pages may be substantially different", differencePercentage);
+        }
+
         using var diffImage = Image.LoadPixelData<Rgba32>(diffPixels, targetWidth, targetHeight);
         byte[] diffBytes;
         using (var ms = new MemoryStream())
@@ -73,9 +90,7 @@ public class ImageComparisonService : IImageComparisonService
             diffBytes = ms.ToArray();
         }
 
-        _logger.LogDebug(
-            "Image comparison: {Different}/{Total} different pixels ({Percentage:F2}%)",
-            differentPixels, totalPixels, differencePercentage);
+        _logger.LogDebug("Diff image generated: {DiffBytes} bytes", diffBytes.Length);
 
         return new ComparisonResult
         {

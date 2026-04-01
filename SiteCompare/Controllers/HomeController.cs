@@ -18,7 +18,9 @@ public class HomeController : Controller
 
     public IActionResult Index()
     {
+        _logger.LogDebug("Loading home page");
         var recentJobs = _jobService.GetAllJobs().Take(5).ToList();
+        _logger.LogDebug("Home page loaded with {Count} recent jobs", recentJobs.Count);
         ViewBag.RecentJobs = recentJobs;
         return View(new StartComparisonViewModel());
     }
@@ -26,6 +28,8 @@ public class HomeController : Controller
     [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
     public IActionResult Error()
     {
-        return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
+        var requestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier;
+        _logger.LogError("Error page shown for request {RequestId}", requestId);
+        return View(new ErrorViewModel { RequestId = requestId });
     }
 }
