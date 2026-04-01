@@ -164,7 +164,11 @@ else
                             }
                         </td>
                         <td>
-                            @if (!string.IsNullOrEmpty(r.PrdScreenshotUrl))
+                            @if (r.PrdIsNotFound)
+                            {
+                                <span class="badge bg-warning text-dark">Not Found</span>
+                            }
+                            else if (!string.IsNullOrEmpty(r.PrdScreenshotUrl))
                             {
                                 <a href="@r.PrdScreenshotUrl" target="_blank" class="btn btn-sm btn-outline-secondary py-0">
                                     <small>PRD 🖼</small>
@@ -172,7 +176,11 @@ else
                             }
                         </td>
                         <td>
-                            @if (!string.IsNullOrEmpty(r.TstScreenshotUrl))
+                            @if (r.TstIsNotFound)
+                            {
+                                <span class="badge bg-warning text-dark">Not Found</span>
+                            }
+                            else if (!string.IsNullOrEmpty(r.TstScreenshotUrl))
                             {
                                 <a href="@r.TstScreenshotUrl" target="_blank" class="btn btn-sm btn-outline-secondary py-0">
                                     <small>TST 🖼</small>

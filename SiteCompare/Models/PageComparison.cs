@@ -14,6 +14,8 @@ public class PageComparison
     public string? ErrorMessage { get; set; }
     public int PrdStatusCode { get; set; }
     public int TstStatusCode { get; set; }
+    public bool PrdIsNotFound { get; set; }
+    public bool TstIsNotFound { get; set; }
 }
 
 public enum PageComparisonStatus

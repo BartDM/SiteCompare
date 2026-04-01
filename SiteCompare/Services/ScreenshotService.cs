@@ -60,7 +60,7 @@ public class ScreenshotService : IScreenshotService, IAsyncDisposable
         }
     }
 
-    public async Task<byte[]?> TakeScreenshotAsync(string url, int width, int height, CancellationToken cancellationToken = default)
+    public async Task<ScreenshotResult?> TakeScreenshotAsync(string url, int width, int height, CancellationToken cancellationToken = default)
     {
         await EnsureBrowserInitializedAsync();
 
@@ -81,7 +81,7 @@ public class ScreenshotService : IScreenshotService, IAsyncDisposable
         }
     }
 
-    private async Task<byte[]?> TryTakeScreenshotAsync(string url, int width, int height, CancellationToken cancellationToken)
+    private async Task<ScreenshotResult?> TryTakeScreenshotAsync(string url, int width, int height, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -127,6 +127,8 @@ public class ScreenshotService : IScreenshotService, IAsyncDisposable
                     Timeout = 30000
                 });
 
+                var finalUrl = page.Url;
+
                 await page.WaitForTimeoutAsync(3000);
 
                 try
@@ -151,7 +153,7 @@ public class ScreenshotService : IScreenshotService, IAsyncDisposable
                 });
 
                 _logger.LogDebug("Screenshot taken for {Url} ({Bytes} bytes)", url, screenshot.Length);
-                return screenshot;
+                return new ScreenshotResult(screenshot, finalUrl);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

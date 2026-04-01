@@ -21,9 +21,17 @@
         <div class="row g-2 mb-2">
             <div class="col-md-6">
                 <strong>PRD:</strong> <a href="@Model.PrdUrl" target="_blank">@Model.PrdUrl</a>
+                @if (Model.PrdIsNotFound)
+                {
+                    <span class="badge bg-warning text-dark ms-2">Not Found on PRD</span>
+                }
             </div>
             <div class="col-md-6">
                 <strong>TST:</strong> <a href="@Model.TstUrl" target="_blank">@Model.TstUrl</a>
+                @if (Model.TstIsNotFound)
+                {
+                    <span class="badge bg-warning text-dark ms-2">Not Found on TST</span>
+                }
             </div>
         </div>
         <div class="row g-2">

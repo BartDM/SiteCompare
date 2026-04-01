@@ -199,17 +199,23 @@ public class ComparisonJobService : IComparisonJobService
 
         await Task.WhenAll(prdTask, tstTask);
 
-        var prdScreenshot = prdTask.Result;
-        var tstScreenshot = tstTask.Result;
+        var prdResult = prdTask.Result;
+        var tstResult = tstTask.Result;
 
-        if (prdScreenshot == null || tstScreenshot == null)
+        if (prdResult == null || tstResult == null)
         {
             comparison.Status = PageComparisonStatus.Error;
-            comparison.ErrorMessage = prdScreenshot == null
+            comparison.ErrorMessage = prdResult == null
                 ? "Failed to capture PRD screenshot"
                 : "Failed to capture TST screenshot";
             return;
         }
+
+        comparison.PrdIsNotFound = IsNotFoundUrl(prdResult.FinalUrl);
+        comparison.TstIsNotFound = IsNotFoundUrl(tstResult.FinalUrl);
+
+        var prdScreenshot = prdResult.Data;
+        var tstScreenshot = tstResult.Data;
 
         // Save screenshots
         var pageDir = Path.Combine(screenshotDir, SanitizePathSegment(comparison.RelativePath));
@@ -240,6 +246,11 @@ public class ComparisonJobService : IComparisonJobService
         comparison.HasDifferences = result.DifferencePercentage > job.DifferenceThreshold;
         comparison.Status = PageComparisonStatus.Success;
     }
+
+    private static bool IsNotFoundUrl(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
+        uri.AbsolutePath.Split('/').Any(segment =>
+            segment.Equals("404", StringComparison.OrdinalIgnoreCase));
 
     private static string GetRelativePath(string absoluteUrl, string baseUrl)
     {
