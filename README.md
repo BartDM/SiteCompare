@@ -121,18 +121,48 @@ De applicatie is bereikbaar op `https://<app-name>.azurewebsites.net`.
 
 ### 5b – Uitrollen als Azure Container Instance (ACI)
 
-Geschikt voor eenvoudige of tijdelijke omgevingen.
+Geschikt voor eenvoudige of tijdelijke omgevingen.  
+Deze aanpak gebruikt een **beheerde identiteit** (managed identity) – geen wachtwoorden of geheimen nodig.
+
+#### Stap 1 – Beheerde identiteit aanmaken en koppelen aan ACR
 
 ```bash
-ACR_PASSWORD=$(az acr credential show --name <acr-name> --query "passwords[0].value" -o tsv)
+# User-assigned managed identity aanmaken
+az identity create \
+  --name sitecompare-identity \
+  --resource-group <resource-group>
 
+# Benodigde ID's ophalen
+IDENTITY_ID=$(az identity show \
+  --name sitecompare-identity \
+  --resource-group <resource-group> \
+  --query id -o tsv)
+
+IDENTITY_PRINCIPAL=$(az identity show \
+  --name sitecompare-identity \
+  --resource-group <resource-group> \
+  --query principalId -o tsv)
+
+ACR_ID=$(az acr show \
+  --name <acr-name> \
+  --query id -o tsv)
+
+# AcrPull-rol toewijzen aan de identiteit (leesrecht op de registry)
+az role assignment create \
+  --assignee "$IDENTITY_PRINCIPAL" \
+  --role AcrPull \
+  --scope "$ACR_ID"
+```
+
+#### Stap 2 – Container aanmaken met beheerde identiteit
+
+```bash
 az container create \
   --resource-group <resource-group> \
   --name sitecompare \
   --image <acr-name>.azurecr.io/sitecompare:latest \
-  --registry-login-server <acr-name>.azurecr.io \
-  --registry-username <acr-name> \
-  --registry-password "$ACR_PASSWORD" \
+  --assign-identity "$IDENTITY_ID" \
+  --acr-identity "$IDENTITY_ID" \
   --ports 8080 \
   --dns-name-label <unique-dns-label> \
   --cpu 1 \
@@ -141,15 +171,54 @@ az container create \
 
 De applicatie is bereikbaar op `http://<unique-dns-label>.<region>.azurecontainer.io:8080`.
 
+> **Opmerking** – ACR admin hoeft **niet** ingeschakeld te zijn voor deze aanpak. De beheerde identiteit regelt de authenticatie via Azure RBAC.
+
 ### 6 – Nieuwe versie uitrollen
 
-```bash
-# Nieuwe image bouwen en pushen
-docker build -t <acr-name>.azurecr.io/sitecompare:latest .
-docker push <acr-name>.azurecr.io/sitecompare:latest
+#### Stap 1 – Nieuwe image bouwen en naar ACR pushen
 
+```bash
+# Image bouwen en pushen via ACR (geen lokale Docker vereist)
+az acr build \
+  --registry <acr-name> \
+  --image sitecompare:latest .
+```
+
+#### Stap 2a – App Service bijwerken (voor stap 5a)
+
+```bash
 # App Service herstarten om de nieuwe image op te halen
 az webapp restart --name <app-name> --resource-group <resource-group>
+```
+
+#### Stap 2b – ACI bijwerken (voor stap 5b)
+
+ACI ondersteunt geen in-place image-update. De container moet opnieuw worden aangemaakt:
+
+```bash
+# Bestaande container verwijderen
+az container delete \
+  --name sitecompare \
+  --resource-group <resource-group> \
+  --yes
+
+# Identiteits-ID opnieuw ophalen (of sla deze op als variabele)
+IDENTITY_ID=$(az identity show \
+  --name sitecompare-identity \
+  --resource-group <resource-group> \
+  --query id -o tsv)
+
+# Container opnieuw aanmaken met de nieuwe image
+az container create \
+  --resource-group <resource-group> \
+  --name sitecompare \
+  --image <acr-name>.azurecr.io/sitecompare:latest \
+  --assign-identity "$IDENTITY_ID" \
+  --acr-identity "$IDENTITY_ID" \
+  --ports 8080 \
+  --dns-name-label <unique-dns-label> \
+  --cpu 1 \
+  --memory 2
 ```
 
 ### Opmerking: Playwright en Chromium
