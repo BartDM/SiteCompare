@@ -1,0 +1,104 @@
+image: mcr.microsoft.com/dotnet/sdk:8.0
+pipelines:
+  branches:
+    main:
+      - step:
+          name: build website
+          script:
+            - dotnet nuget add source https://f.feedz.io/rgf/dxp-semver/nuget/index.json --password $FEEDZ_API --name Feedz --store-password-in-clear-text --username aa
+            #restore packages
+            - dotnet restore
+            #build specific component
+            - dotnet build
+    bugfix/*:
+      - step:
+          name: build website
+          script:
+            - dotnet nuget add source https://f.feedz.io/rgf/dxp-semver/nuget/index.json --password $FEEDZ_API --name Feedz --store-password-in-clear-text --username aa
+            #restore packages
+            - dotnet restore
+            #build specific component
+            - dotnet build
+    feature/*:
+      - step:
+          name: build website
+          script:
+            - dotnet nuget add source https://f.feedz.io/rgf/dxp-semver/nuget/index.json --password $FEEDZ_API --name Feedz --store-password-in-clear-text --username aa
+            #restore packages
+            - dotnet restore
+            #build specific component
+            - dotnet build    
+    release/*:
+      - step:
+          name: Package
+          script:
+          - apt-get update
+          - apt-get install zip -y
+          #build Docker
+          - docker build -t sitecompare .
+          #publish Docker
+          - az acr login --name RgfWebteamRegistry
+          - az acr build --registry RgfWebteamRegistry --image sitecompare:latest .
+
+          
+
+      #     #build
+      #     - dotnet nuget add source https://f.feedz.io/rgf/dxp-semver/nuget/index.json --password $FEEDZ_API --name Feedz --store-password-in-clear-text --username aa
+      #     - dotnet restore
+      #     - dotnet build
+      #     #publish            
+      #     - dotnet publish ./$PROJECT/$PROJECT.csproj -c Release -o ./publish
+      #     - cd ./publish
+      #     - ls -l
+      #     - zip -r web_prod.zip .
+      #     - cd ./wwwroot
+      #     - rm robots.txt
+      #     - mv robots.uat.txt robots.txt
+      #     - cd ..
+      #     - zip -r web_uat.zip .
+      #     artifacts:
+      #       - 'publish/web_prod.zip'
+      #       - 'publish/web_uat.zip'
+      #       - 'slack_payload_uat.json'
+      #       - 'slack_payload_prd.json'
+      # - step:
+      #     name: Publish + Deploy to Azure UAT
+      #     deployment: UAT
+      #     trigger: automatic
+      #     image: mcr.microsoft.com/azure-cli
+      #     script:
+      #     - cd publish
+      #     - az login --service-principal --username "$AZURE_APP_ID" --password "$AZURE_PASSWORD" --tenant "$AZURE_TENANT_ID"
+      #     - az webapp stop -g $RESOURCE_GROUP -n $AZURE_APP_NAME_ADMIN
+      #     - az webapp deploy --type zip --async true -g $RESOURCE_GROUP -n $AZURE_APP_NAME_ADMIN --src-path web_uat.zip --clean true 
+      #     - az webapp start -g $RESOURCE_GROUP -n $AZURE_APP_NAME_ADMIN
+      #     - az webapp stop -g $RESOURCE_GROUP -n $AZURE_APP_NAME
+      #     - az webapp deploy --type zip --async true -g $RESOURCE_GROUP -n $AZURE_APP_NAME --src-path web_uat.zip --clean true
+      #     - az webapp start -g $RESOURCE_GROUP -n $AZURE_APP_NAME
+      #     - az afd endpoint purge --profile-name uat-dxp-frontdoor --domains $DOMAIN --content-paths '/*' --endpoint-name uat-dxp-websites --no-wait -g $RESOURCE_GROUP    
+      #     - cd ..
+      #     - pipe: atlassian/slack-notify:2.3.0
+      #       variables:
+      #           WEBHOOK_URL: '$SLACK_HOOK_URL'
+      #           PAYLOAD_FILE: slack_payload_uat.json
+      #           DEBUG: 'true' # Optional. 
+      # - step:
+      #     name: Publish + Deploy to Azure PRD
+      #     deployment: PRD
+      #     trigger: manual
+      #     image: mcr.microsoft.com/azure-cli
+      #     script:
+      #     - cd publish
+      #     - az login --service-principal --username "$AZURE_APP_ID" --password "$AZURE_PASSWORD" --tenant "$AZURE_TENANT_ID"
+      #     - az webapp stop -g $RESOURCE_GROUP -n $AZURE_APP_NAME_ADMIN
+      #     - az webapp deploy --type zip --async true -g $RESOURCE_GROUP -n $AZURE_APP_NAME_ADMIN --src-path web_prod.zip --clean true
+      #     - az webapp start -g $RESOURCE_GROUP -n $AZURE_APP_NAME_ADMIN
+      #     - az webapp stop -g $RESOURCE_GROUP -n $AZURE_APP_NAME --slot swap 
+      #     - az webapp deploy --type zip --async true -g $RESOURCE_GROUP -n $AZURE_APP_NAME --src-path web_prod.zip --slot swap --clean true
+      #     - az afd endpoint purge --profile-name dxp-frontdoor --domains $DOMAIN --content-paths '/*' --endpoint-name dxp-websites-swap --no-wait -g $RESOURCE_GROUP  
+      #     - cd ..
+      #     - pipe: atlassian/slack-notify:2.3.0
+      #       variables:
+      #         WEBHOOK_URL: '$SLACK_HOOK_URL'
+      #         PAYLOAD_FILE: slack_payload_prd.json
+      #         DEBUG: 'true' # Optional. 
