@@ -6,6 +6,7 @@ pipelines:
           name: build website
           script:
             - dotnet nuget add source https://f.feedz.io/rgf/dxp-semver/nuget/index.json --password $FEEDZ_API --name Feedz --store-password-in-clear-text --username aa
+            - cd SiteCompare
             #restore packages
             - dotnet restore
             #build specific component
@@ -15,6 +16,7 @@ pipelines:
           name: build website
           script:
             - dotnet nuget add source https://f.feedz.io/rgf/dxp-semver/nuget/index.json --password $FEEDZ_API --name Feedz --store-password-in-clear-text --username aa
+            - cd SiteCompare
             #restore packages
             - dotnet restore
             #build specific component
@@ -24,6 +26,7 @@ pipelines:
           name: build website
           script:
             - dotnet nuget add source https://f.feedz.io/rgf/dxp-semver/nuget/index.json --password $FEEDZ_API --name Feedz --store-password-in-clear-text --username aa
+            
             #restore packages
             - dotnet restore
             #build specific component
@@ -40,7 +43,7 @@ pipelines:
           - az acr login --name RgfWebteamRegistry
           - az acr build --registry RgfWebteamRegistry --image sitecompare:latest .
 
-          
+
 
       #     #build
       #     - dotnet nuget add source https://f.feedz.io/rgf/dxp-semver/nuget/index.json --password $FEEDZ_API --name Feedz --store-password-in-clear-text --username aa
