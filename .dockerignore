@@ -1,0 +1,29 @@
+# Build artefacts
+**/bin/
+**/obj/
+**/out/
+
+# Publish output
+publish/
+
+# Test results
+**/TestResults/
+
+# Logs
+*.log
+Logs/
+
+# Runtime-generated screenshots
+SiteCompare/wwwroot/screenshots/
+
+# IDE and OS noise
+.vs/
+.idea/
+.git/
+.gitignore
+*.user
+*.suo
+
+# Solution file (not needed inside the image)
+*.slnx
+*.sln
