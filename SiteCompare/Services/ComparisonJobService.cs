@@ -1,29 +1,38 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using SiteCompare.Models;
+using StackExchange.Redis;
 
 namespace SiteCompare.Services;
 
 public class ComparisonJobService : IComparisonJobService
 {
+    private const string RedisJobsSetKey = "sitecompare:jobs";
+    private static string RedisJobKey(string jobId) => $"sitecompare:job:{jobId}";
+
     private readonly ConcurrentDictionary<string, ComparisonJob> _jobs = new();
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _cancellationSources = new();
     private readonly ISitemapService _sitemapService;
     private readonly IScreenshotService _screenshotService;
     private readonly IImageComparisonService _imageComparisonService;
-    private readonly IWebHostEnvironment _environment;
+    private readonly IAzureBlobStorageService _blobStorageService;
+    private readonly IDatabase? _redisDb;
     private readonly ILogger<ComparisonJobService> _logger;
 
     public ComparisonJobService(
         ISitemapService sitemapService,
         IScreenshotService screenshotService,
         IImageComparisonService imageComparisonService,
-        IWebHostEnvironment environment,
+        IAzureBlobStorageService blobStorageService,
+        IServiceProvider serviceProvider,
         ILogger<ComparisonJobService> logger)
     {
         _sitemapService = sitemapService;
         _screenshotService = screenshotService;
         _imageComparisonService = imageComparisonService;
-        _environment = environment;
+        _blobStorageService = blobStorageService;
+        _redisDb = serviceProvider.GetService<IConnectionMultiplexer>()?.GetDatabase();
         _logger = logger;
     }
 
@@ -42,14 +51,23 @@ public class ComparisonJobService : IComparisonJobService
         };
 
         _jobs[job.Id] = job;
+        _ = PersistJobToRedisAsync(job);
         return job;
     }
 
-    public ComparisonJob? GetJob(string jobId) =>
-        _jobs.TryGetValue(jobId, out var job) ? job : null;
+    public ComparisonJob? GetJob(string jobId)
+    {
+        if (_jobs.TryGetValue(jobId, out var job))
+            return job;
 
-    public IEnumerable<ComparisonJob> GetAllJobs() =>
-        _jobs.Values.OrderByDescending(j => j.StartedAt);
+        return LoadJobFromRedis(jobId);
+    }
+
+    public IEnumerable<ComparisonJob> GetAllJobs()
+    {
+        LoadAllJobsFromRedis();
+        return _jobs.Values.OrderByDescending(j => j.StartedAt);
+    }
 
     public void CancelJob(string jobId)
     {
@@ -93,6 +111,7 @@ public class ComparisonJobService : IComparisonJobService
                 job.ErrorMessage = "No URLs found in sitemap. Check that the sitemap path is correct and accessible.";
                 job.CompletedAt = DateTime.UtcNow;
                 _logger.LogWarning("Job {JobId}: No URLs found in sitemap", jobId);
+                await PersistJobToRedisAsync(job);
                 return;
             }
 
@@ -109,10 +128,6 @@ public class ComparisonJobService : IComparisonJobService
                 job.TotalPages = allUrls.Count;
                 _logger.LogInformation("Job {JobId}: URL list capped to {Max} URLs", jobId, job.MaxUrls);
             }
-
-            // Create screenshot directory for this job
-            var screenshotDir = Path.Combine(_environment.WebRootPath, "screenshots", jobId);
-            Directory.CreateDirectory(screenshotDir);
 
             // Step 2: Compare each page
             int processed = 0;
@@ -136,7 +151,7 @@ public class ComparisonJobService : IComparisonJobService
 
                 try
                 {
-                    await ComparePageAsync(comparison, job, screenshotDir, cts.Token);
+                    await ComparePageAsync(comparison, job, cts.Token);
                 }
                 catch (OperationCanceledException)
                 {
@@ -158,6 +173,7 @@ public class ComparisonJobService : IComparisonJobService
             job.Status = ComparisonStatus.Completed;
             job.CompletedAt = DateTime.UtcNow;
             job.CurrentPage = string.Empty;
+            PersistJobToRedis(job);
 
             _logger.LogInformation(
                 "Job {JobId} completed: {Total} pages, {Different} different, {Error} errors",
@@ -168,6 +184,7 @@ public class ComparisonJobService : IComparisonJobService
             job.Status = ComparisonStatus.Failed;
             job.ErrorMessage = "Job was cancelled.";
             job.CompletedAt = DateTime.UtcNow;
+            PersistJobToRedis(job);
             _logger.LogInformation("Job {JobId} was cancelled", jobId);
         }
         catch (Exception ex)
@@ -175,6 +192,7 @@ public class ComparisonJobService : IComparisonJobService
             job.Status = ComparisonStatus.Failed;
             job.ErrorMessage = ex.Message;
             job.CompletedAt = DateTime.UtcNow;
+            PersistJobToRedis(job);
             _logger.LogError(ex, "Job {JobId} failed", jobId);
         }
         finally
@@ -186,7 +204,6 @@ public class ComparisonJobService : IComparisonJobService
     private async Task ComparePageAsync(
         PageComparison comparison,
         ComparisonJob job,
-        string screenshotDir,
         CancellationToken cancellationToken)
     {
         _logger.LogDebug("Comparing: {Prd} vs {Tst}", comparison.PrdUrl, comparison.TstUrl);
@@ -211,34 +228,92 @@ public class ComparisonJobService : IComparisonJobService
             return;
         }
 
-        // Save screenshots
-        var pageDir = Path.Combine(screenshotDir, SanitizePathSegment(comparison.RelativePath));
-        Directory.CreateDirectory(pageDir);
-        EnsurePathIsInsideBase(screenshotDir, pageDir);
+        // Upload screenshots to Azure Blob Storage
+        var blobBase = $"{job.Id}/{SanitizePathSegment(comparison.RelativePath)}";
 
-        var prdPath = Path.Combine(pageDir, "prd.png");
-        var tstPath = Path.Combine(pageDir, "tst.png");
-        var diffPath = Path.Combine(pageDir, "diff.png");
-
-        await File.WriteAllBytesAsync(prdPath, prdScreenshot, cancellationToken);
-        await File.WriteAllBytesAsync(tstPath, tstScreenshot, cancellationToken);
+        var prdUploadTask = _blobStorageService.UploadScreenshotAsync($"{blobBase}/prd.png", prdScreenshot, cancellationToken);
+        var tstUploadTask = _blobStorageService.UploadScreenshotAsync($"{blobBase}/tst.png", tstScreenshot, cancellationToken);
 
         // Compare images
         var result = _imageComparisonService.Compare(prdScreenshot, tstScreenshot, job.IgnoreWhitespaceDifferences);
 
-        if (result.DiffImage != null)
-        {
-            await File.WriteAllBytesAsync(diffPath, result.DiffImage, cancellationToken);
-        }
+        Task<string>? diffUploadTask = result.DiffImage != null
+            ? _blobStorageService.UploadScreenshotAsync($"{blobBase}/diff.png", result.DiffImage, cancellationToken)
+            : null;
 
-        // Build web-accessible URLs relative to wwwroot
-        var urlBase = $"/screenshots/{job.Id}/{SanitizePathSegment(comparison.RelativePath)}";
-        comparison.PrdScreenshotUrl = $"{urlBase}/prd.png";
-        comparison.TstScreenshotUrl = $"{urlBase}/tst.png";
-        comparison.DiffImageUrl = $"{urlBase}/diff.png";
+        await Task.WhenAll(
+            prdUploadTask,
+            tstUploadTask,
+            diffUploadTask ?? Task.FromResult(string.Empty));
+
+        comparison.PrdScreenshotUrl = await prdUploadTask;
+        comparison.TstScreenshotUrl = await tstUploadTask;
+        comparison.DiffImageUrl = diffUploadTask != null ? await diffUploadTask : null;
         comparison.DifferencePercentage = result.DifferencePercentage;
         comparison.HasDifferences = result.DifferencePercentage > job.DifferenceThreshold;
         comparison.Status = PageComparisonStatus.Success;
+    }
+
+    private async Task PersistJobToRedisAsync(ComparisonJob job)
+    {
+        if (_redisDb == null)
+            return;
+
+        try
+        {
+            var json = JsonSerializer.Serialize(job);
+            await _redisDb.StringSetAsync(RedisJobKey(job.Id), json);
+            await _redisDb.SetAddAsync(RedisJobsSetKey, job.Id);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to persist job {JobId} to Redis", job.Id);
+        }
+    }
+
+    private ComparisonJob? LoadJobFromRedis(string jobId)
+    {
+        if (_redisDb == null)
+            return null;
+
+        try
+        {
+            var json = (string?)_redisDb.StringGet(RedisJobKey(jobId));
+            if (json == null)
+                return null;
+
+            var job = JsonSerializer.Deserialize<ComparisonJob>(json);
+            if (job != null)
+                _jobs[job.Id] = job;
+
+            return job;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load job from Redis");
+            return null;
+        }
+    }
+
+    private void LoadAllJobsFromRedis()
+    {
+        if (_redisDb == null)
+            return;
+
+        try
+        {
+            var jobIds = _redisDb.SetMembers(RedisJobsSetKey);
+            foreach (var id in jobIds)
+            {
+                var jobId = (string?)id;
+                if (jobId != null && !_jobs.ContainsKey(jobId))
+                    LoadJobFromRedis(jobId);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load jobs from Redis");
+        }
     }
 
     private static string GetRelativePath(string absoluteUrl, string baseUrl)
@@ -268,15 +343,5 @@ public class ComparisonJobService : IComparisonJobService
             sanitized = "root";
 
         return sanitized.Length > 120 ? sanitized[..120] : sanitized;
-    }
-
-    private static void EnsurePathIsInsideBase(string basePath, string filePath)
-    {
-        var fullBase = Path.GetFullPath(basePath) + Path.DirectorySeparatorChar;
-        var fullFile = Path.GetFullPath(filePath);
-        if (!fullFile.StartsWith(fullBase, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException($"Path escapes the base directory: {filePath}");
-        }
     }
 }

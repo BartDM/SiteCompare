@@ -1,4 +1,5 @@
 using SiteCompare.Services;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,6 +12,17 @@ builder.Services.AddHttpClient("SitemapClient", client =>
     client.DefaultRequestHeaders.Add("User-Agent", "SiteCompare/1.0 (+https://github.com/BartDM/SiteCompare)");
     client.Timeout = TimeSpan.FromSeconds(30);
 });
+
+// Azure Blob Storage for screenshots
+builder.Services.AddSingleton<IAzureBlobStorageService, AzureBlobStorageService>();
+
+// Redis for job persistence
+var redisConnectionString = builder.Configuration["Redis:ConnectionString"];
+if (!string.IsNullOrWhiteSpace(redisConnectionString))
+{
+    builder.Services.AddSingleton<IConnectionMultiplexer>(
+        ConnectionMultiplexer.Connect(redisConnectionString));
+}
 
 // Application services
 builder.Services.AddSingleton<IComparisonJobService, ComparisonJobService>();
