@@ -1,7 +1,17 @@
+using Azure.Identity;
 using SiteCompare.Services;
 using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Load secrets from Azure Key Vault when a vault URL is configured.
+// In Azure Container Instances, set the environment variable KeyVault__Url to the vault URI.
+// The managed identity assigned to the container group is used automatically via DefaultAzureCredential.
+var keyVaultUrl = builder.Configuration["KeyVault:Url"];
+if (!string.IsNullOrWhiteSpace(keyVaultUrl))
+{
+    builder.Configuration.AddAzureKeyVault(new Uri(keyVaultUrl), new DefaultAzureCredential());
+}
 
 // Add services to the container.
 builder.Services.AddControllersWithViews();

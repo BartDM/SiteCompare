@@ -173,7 +173,7 @@ public class ComparisonJobService : IComparisonJobService
             job.Status = ComparisonStatus.Completed;
             job.CompletedAt = DateTime.UtcNow;
             job.CurrentPage = string.Empty;
-            PersistJobToRedis(job);
+            await PersistJobToRedisAsync(job);
 
             _logger.LogInformation(
                 "Job {JobId} completed: {Total} pages, {Different} different, {Error} errors",
@@ -184,7 +184,7 @@ public class ComparisonJobService : IComparisonJobService
             job.Status = ComparisonStatus.Failed;
             job.ErrorMessage = "Job was cancelled.";
             job.CompletedAt = DateTime.UtcNow;
-            PersistJobToRedis(job);
+            await PersistJobToRedisAsync(job);
             _logger.LogInformation("Job {JobId} was cancelled", jobId);
         }
         catch (Exception ex)
@@ -192,7 +192,7 @@ public class ComparisonJobService : IComparisonJobService
             job.Status = ComparisonStatus.Failed;
             job.ErrorMessage = ex.Message;
             job.CompletedAt = DateTime.UtcNow;
-            PersistJobToRedis(job);
+            await PersistJobToRedisAsync(job);
             _logger.LogError(ex, "Job {JobId} failed", jobId);
         }
         finally

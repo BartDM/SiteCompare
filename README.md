@@ -124,6 +124,9 @@ De applicatie is bereikbaar op `https://<app-name>.azurewebsites.net`.
 Geschikt voor eenvoudige of tijdelijke omgevingen.  
 Deze aanpak gebruikt een **beheerde identiteit** (managed identity) – geen wachtwoorden of geheimen nodig.
 
+De gevoelige verbindingsstrings (`AzureStorage:ConnectionString`, `Redis:ConnectionString`) worden **nooit als environment variable** doorgegeven.  
+Ze worden veilig opgeslagen in **Azure Key Vault** en door de applicatie opgehaald via de managed identity.
+
 #### Stap 1 – Beheerde identiteit aanmaken en koppelen aan ACR
 
 ```bash
@@ -154,9 +157,52 @@ az role assignment create \
   --scope "$ACR_ID"
 ```
 
-#### Stap 2 – Container aanmaken met beheerde identiteit
+#### Stap 2 – Key Vault aanmaken en secrets opslaan
 
 ```bash
+# Key Vault aanmaken
+az keyvault create \
+  --name <keyvault-name> \
+  --resource-group <resource-group> \
+  --location westeurope
+
+# Verbindingsstrings opslaan als secrets
+# Let op: gebruik dubbele koppeltekens (--) als scheidingsteken voor ASP.NET Core configuratiehiërarchie
+az keyvault secret set \
+  --vault-name <keyvault-name> \
+  --name "AzureStorage--ConnectionString" \
+  --value "<storage-connection-string>"
+
+az keyvault secret set \
+  --vault-name <keyvault-name> \
+  --name "Redis--ConnectionString" \
+  --value "<redis-connection-string>"
+```
+
+#### Stap 3 – Managed identity leesrechten geven op Key Vault
+
+```bash
+KV_ID=$(az keyvault show \
+  --name <keyvault-name> \
+  --query id -o tsv)
+
+# Key Vault Secrets User-rol toewijzen (leesrecht op secrets)
+az role assignment create \
+  --assignee "$IDENTITY_PRINCIPAL" \
+  --role "Key Vault Secrets User" \
+  --scope "$KV_ID"
+```
+
+#### Stap 4 – Container aanmaken met beheerde identiteit
+
+De enige environment variable die doorgegeven wordt is de **niet-gevoelige** Key Vault URL.  
+De applicatie haalt de verbindingsstrings automatisch op bij het opstarten.
+
+```bash
+KV_URL=$(az keyvault show \
+  --name <keyvault-name> \
+  --query properties.vaultUri -o tsv)
+
 az container create \
   --resource-group <resource-group> \
   --name sitecompare \
@@ -166,7 +212,8 @@ az container create \
   --ports 8080 \
   --dns-name-label <unique-dns-label> \
   --cpu 1 \
-  --memory 2
+  --memory 2 \
+  --environment-variables KeyVault__Url="$KV_URL"
 ```
 
 De applicatie is bereikbaar op `http://<unique-dns-label>.<region>.azurecontainer.io:8080`.
@@ -218,7 +265,8 @@ az container create \
   --ports 8080 \
   --dns-name-label <unique-dns-label> \
   --cpu 1 \
-  --memory 2
+  --memory 2 \
+  --environment-variables KeyVault__Url="$KV_URL"
 ```
 
 ### Opmerking: Playwright en Chromium
